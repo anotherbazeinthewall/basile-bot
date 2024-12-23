@@ -1,0 +1,13 @@
+.DS_Store
+.venv/
+archive/
+__pycache__/
+*.py[cod]
+*$py.class
+poetry.lock
+.env
+.venv/
+distribute.sh
+config.json
+trust-policy.json
+bedrock-policy.json

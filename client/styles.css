@@ -1,0 +1,87 @@
+/* Base */
+body {
+    background: black;
+    font-family: monospace;
+    color: palegreen;
+    height: 100vh;
+    margin: 0;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Typography */
+h1 {
+    letter-spacing: 4px;
+    margin: 20px 0 8px;
+}
+
+h4 {
+    margin: 0 0 8px;
+}
+
+a {
+    color: inherit;
+}
+
+/* Layout */
+.mobile-content,
+#terminal {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+
+.mobile-content {
+    flex-direction: column;
+    align-items: center;
+    padding-top: 2rem;
+    text-align: center;
+    opacity: 1;
+    visibility: visible;
+}
+
+#terminal {
+    inset: 10%;
+    opacity: 0;
+    visibility: hidden;
+}
+
+/* ASCII Art */
+.ascii-container {
+    max-width: 100%;
+    overflow-x: auto;
+    display: flex;
+    justify-content: center;
+}
+
+pre#ascii-art {
+    margin: 0;
+    font-family: inherit;
+    font-weight: 900;
+    font-size: calc(1em + 1vw);
+    text-align: left;
+    white-space: pre;
+    text-shadow: 0 0 5px currentColor,
+        0 0 10px currentColor,
+        0 0 20px currentColor;
+}
+
+/* Media Queries */
+@media screen and (min-width: 769px) {
+    .mobile-content {
+        opacity: 0;
+        visibility: hidden;
+    }
+
+    #terminal {
+        opacity: 1;
+        visibility: visible;
+    }
+}
+
+@media screen and (max-width: 768px) {
+    pre#ascii-art {
+        font-size: calc(0.5em + 1vw);
+    }
+}

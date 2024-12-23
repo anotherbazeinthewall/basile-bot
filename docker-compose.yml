@@ -1,0 +1,21 @@
+version: "3.9"
+services:
+  basile-bot:
+    image: basile-bot-serverless
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        AWS_REGION: ${AWS_REGION}
+        AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+        AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+    x-bake:
+      platforms:
+        - linux/amd64
+      build-args:
+        BUILDKIT_INLINE_CACHE: "1"
+      provenance: false
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
