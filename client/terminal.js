@@ -109,7 +109,7 @@ class PyTerminal {
 
             // this.term.writeln('\u001b[90mPython environment ready\u001b[0m');
             // Load and run main Python code
-            const response = await fetch('/main.py');
+            const response = await fetch('/app.py');
             const pythonCode = await response.text();
             await this.pyodide.runPythonAsync(pythonCode);
             await this.pyodide.runPythonAsync('asyncio.ensure_future(main())');
