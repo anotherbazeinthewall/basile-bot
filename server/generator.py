@@ -1,4 +1,4 @@
-import os, boto3
+import os, boto3, json
 from botocore.config import Config
 
 def _get_clients():
@@ -24,11 +24,23 @@ def generate_stream(messages, max_gen_len=1024, temperature=0.9):
             system=[{"text": m["content"]} for m in messages if m["role"] == "system"],
             inferenceConfig={"maxTokens": max_gen_len, "temperature": temperature}
         )
+        
         for e in response.get('stream', []):
             if text := e.get('contentBlockDelta', {}).get('delta', {}).get('text', ''):
-                yield f'data: {{"choices":[{{"delta":{{"content":"{text}"}}}}]}}\n\n'
+                # Properly serialize the JSON response
+                chunk = {
+                    "choices": [{
+                        "delta": {
+                            "content": text
+                        }
+                    }]
+                }
+                yield f'data: {json.dumps(chunk)}\n\n'
+                
         yield 'data: [DONE]\n\n'
-    except: yield 'data: [ERROR]\n\n'
+    except Exception as e:
+        print(f"Generation error: {str(e)}")  # Log the actual error
+        yield 'data: [ERROR]\n\n'
 
 if __name__ == "__main__":
     if bedrock.get_foundation_model(modelIdentifier=MODEL_ID).get('modelDetails', {}).get('responseStreamingSupported'):
