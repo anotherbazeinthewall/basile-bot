@@ -3,19 +3,21 @@ FROM public.ecr.aws/docker/library/python:3.12-slim-bullseye AS builder
 
 WORKDIR /app
 
-# Install build dependencies
+# Install build dependencies and poetry
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
     && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    && apt-get clean \
+    && pip install --no-cache-dir poetry
 
-# Copy requirements file
-COPY requirements.txt .
+# Copy only pyproject.toml and poetry.lock first
+COPY pyproject.toml poetry.lock ./
 
-# Install dependencies to a specific directory
-RUN python -m venv /opt/venv && \
+# Export dependencies to requirements.txt and install them
+RUN poetry export -f requirements.txt --output requirements.txt --without-hashes && \
+    python -m venv /opt/venv && \
     /opt/venv/bin/pip install --no-cache-dir -r requirements.txt && \
     find /opt/venv -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
     find /opt/venv -type f -name "*.pyc" -delete && \
@@ -48,13 +50,10 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONOPTIMIZE=2 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    # Disable pip cache and bytecode writing
-    PIP_NO_CACHE_DIR=1 \
-    # Reduce memory usage
-    PYTHONMALLOC=malloc \
-    PYTHONHASHSEED=random \
-    # Reduce startup time
-    PYTHONPROFILEIMPORTTIME=0
+    # Process optimizations
+    WEB_CONCURRENCY=1 \
+    WORKERS_PER_CORE=1 \
+    MAX_WORKERS=1
 
 WORKDIR /app
 
