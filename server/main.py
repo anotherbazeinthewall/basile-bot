@@ -1,39 +1,67 @@
-import os
+import time
 import logging
 import datetime
+import os
 from pathlib import Path
+from contextlib import asynccontextmanager
+
+# Initialize timing
+startup_time = time.time()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    force=True
+)
+logger = logging.getLogger(__name__)
+
+def log_time(message):
+    logger.info(f"STARTUP TIMING - {message}: {time.time() - startup_time:.2f}s")
+
+log_time("Starting imports")
+
 from pydantic import BaseModel
+log_time("Pydantic imported")
+
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, FileResponse, StreamingResponse
+log_time("FastAPI and dependencies imported")
+
 from linkedin import pull_linkedin
 from github import pull_github
 from resume import pull_resume
 from generator import generate_stream
+log_time("Local modules imported")
 
 # Get the project root directory
 PROJECT_ROOT = Path(__file__).parent.parent
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger(__name__)
+log_time("Project root configured")
 
 class Message(BaseModel):
     role: str
-    content: str 
+    content: str
 
 class ChatRequest(BaseModel):
     messages: list[Message]
+log_time("Models defined")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    log_time("Starting application startup")
+    yield
+    log_time("Application shutdown")
 
 # Initialize FastAPI app
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
+log_time("FastAPI app created")
 
 # Mount static files using absolute path
 app.mount("/static", StaticFiles(directory=str(PROJECT_ROOT / "client")), name="static")
+log_time("Static files mounted")
 
 # Configure CORS
 origins = [
@@ -41,6 +69,7 @@ origins = [
     "https://2m3b4rdkqwbfy5xca6cjbbjey40ickzn.lambda-url.us-west-2.on.aws",
     "*"
 ]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -49,6 +78,7 @@ app.add_middleware(
     allow_credentials=True,
     max_age=86400
 )
+log_time("CORS configured")
 
 @app.get("/health")
 async def health_check():
@@ -123,14 +153,15 @@ async def chat_completion(request: ChatRequest):
         logger.error(f"Error in chat completion: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-# Run the application if executed directly
 if __name__ == "__main__":
+    log_time("Starting uvicorn")
     import uvicorn
     uvicorn.run(
-        "main:app",  # Just reference this file's app
+        "main:app",
         host="0.0.0.0",
         port=8000,
         reload=True,
         reload_excludes=["*.pyc", "*.log"],
-        reload_includes=["*.py", "*.html", "*.css", "*.js"]
+        reload_includes=["*.py", "*.html", "*.css", "*.js"],
+        log_level="info"
     )
