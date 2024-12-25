@@ -1,48 +1,53 @@
 # Build stage
-FROM public.ecr.aws/docker/library/python:3.12-slim-bullseye AS builder
+FROM public.ecr.aws/docker/library/python:3.12-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies and poetry
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+# Install build dependencies
+RUN apk add --no-cache \
     gcc \
+    musl-dev \
     python3-dev \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean \
+    libffi-dev \
+    cargo \
+    rust \
+    git \
     && pip install --no-cache-dir poetry
 
 # Copy only pyproject.toml and poetry.lock first
 COPY pyproject.toml poetry.lock ./
 
-# Export dependencies to requirements.txt and install them
-RUN poetry export -f requirements.txt --output requirements.txt --without-hashes && \
-    python -m venv /opt/venv && \
-    /opt/venv/bin/pip install --no-cache-dir -r requirements.txt && \
-    find /opt/venv -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true && \
-    find /opt/venv -type f -name "*.pyc" -delete && \
-    find /opt/venv -type f -name "*.pyo" -delete && \
-    find /opt/venv -type f -name "*.dist-info" -exec rm -rf {} + && \
-    find /opt/venv -type f -name "*.egg-info" -exec rm -rf {} + && \
-    find /opt/venv -type f -name "*.txt" -delete && \
-    find /opt/venv -type f -name "*.md" -delete && \
-    find /opt/venv -type f -name "*.h" -delete && \
-    find /opt/venv -type d -name "tests" -exec rm -rf {} + && \
-    find /opt/venv -type d -name "test" -exec rm -rf {} +
+# Install dependencies directly with poetry
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-interaction --no-ansi --no-root \
+    && pip install --no-cache-dir --force-reinstall boto3 botocore \
+    && find /usr/local -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true \
+    && find /usr/local -type f -name "*.pyc" -delete \
+    && find /usr/local -type f -name "*.pyo" -delete \
+    && find /usr/local -type f -name "*.egg-info" -exec rm -rf {} + \
+    && find /usr/local -type f -name "*.txt" -delete \
+    && find /usr/local -type f -name "*.md" -delete \
+    && find /usr/local -type f -name "*.h" -delete \
+    && find /usr/local -type d -name "test" -exec rm -rf {} + \
+    && find /usr/local -type d -name "examples" -exec rm -rf {} + \
+    && pip cache purge
 
 # Final stage
-FROM public.ecr.aws/docker/library/python:3.12-slim-bullseye
+FROM public.ecr.aws/docker/library/python:3.12-alpine
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    libstdc++ \
+    libffi
 
 # Copy the Lambda adapter
 COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.8.4 /lambda-adapter /opt/extensions/lambda-adapter
 
-# Copy virtual environment from builder
-COPY --from=builder /opt/venv /opt/venv
+# Copy Python packages from builder
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 
 # Set environment variables in a single layer
-ENV PATH="/opt/venv/bin:$PATH" \
-    PYTHONPATH="/opt/venv/lib/python3.12/site-packages" \
-    AWS_LAMBDA_FUNCTION_HANDLER=server.main:app \
+ENV AWS_LAMBDA_FUNCTION_HANDLER=server.main:app \
     AWS_LWA_INVOKE_MODE=RESPONSE_STREAM \
     PORT=8000 \
     UVICORN_APP=server.main:app \
@@ -50,6 +55,9 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONOPTIMIZE=2 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    PYTHONMALLOC=malloc \
+    PYTHONHASHSEED=random \
+    PYTHONNOUSERSITE=1 \
     # Process optimizations
     WEB_CONCURRENCY=1 \
     WORKERS_PER_CORE=1 \
@@ -57,7 +65,7 @@ ENV PATH="/opt/venv/bin:$PATH" \
 
 WORKDIR /app
 
-# Copy all application files (excluding those in .dockerignore)
+# Copy application files (excluding those in .dockerignore)
 COPY . .
 
 # AWS credentials should be handled by IAM roles instead of environment variables
@@ -67,4 +75,4 @@ ENV AWS_REGION=${AWS_REGION}
 EXPOSE 8000
 
 # Use optimized Python runtime with all optimizations enabled
-CMD ["/opt/venv/bin/python", "-OO", "server/main.py"]
+CMD ["python", "-OO", "server/main.py"]

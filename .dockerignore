@@ -1,25 +1,22 @@
+# Version control
 .git
 .gitignore
 **/.git*
+
+# Docker files
 Dockerfile
 .dockerignore
 docker-compose.yml
+
+# Development and deployment
 deployment/
+archive/
+
+# Python
 **/__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-.pytest_cache
-.coverage
-htmlcov
-.env
-.venv
-venv
-*.egg-info
-dist
-build
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# OS specific
 .DS_Store
-*.log
-.idea/
-.vscode/
