@@ -65,7 +65,7 @@ def pull_resume() -> str:
     # Clean up extra whitespace while preserving intentional line breaks
     final_text = re.sub(r'\n\s*\n', '\n\n', final_text)
     
-    return f"YOUR RESUME:\n\n{final_text}\n"
+    return f"YOUR RESUME:\n\n{final_text}\n\n"
 
 if __name__ == "__main__":
     resume = pull_resume()
