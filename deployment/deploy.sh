@@ -154,13 +154,13 @@ if ! command -v jq &> /dev/null; then
 fi
 echo "✓ jq is available"
 
-# # Export requirements
-# echo "Exporting requirements..."
-# if ! poetry export -f requirements.txt --output requirements.txt --without-hashes; then
-#     echo "⚠️  Failed to export requirements. Continuing anyway..."
-# else
-#     echo "✓ Requirements exported"
-# fi
+# Export requirements
+echo "Exporting requirements..."
+if ! (cd "$PROJECT_ROOT" && poetry export -f requirements.txt --output requirements.txt --without-hashes); then
+    echo "⚠️  Failed to export requirements. Continuing anyway..."
+else
+    echo "✓ Requirements exported"
+fi
 
 # Load existing configuration
 echo "Loading configuration..."
