@@ -43,8 +43,8 @@ a {
 
 #terminal {
     inset: 10%;
-    opacity: 0;
-    visibility: hidden;
+    /* opacity: 0;
+    visibility: hidden; */
 }
 
 /* ASCII Art */
