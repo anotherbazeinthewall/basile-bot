@@ -1,40 +1,42 @@
-FROM public.ecr.aws/docker/library/python:3.12.0-slim-bullseye
-COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.8.4 /lambda-adapter /opt/extensions/lambda-adapter
+# Build stage
+FROM public.ecr.aws/docker/library/python:3.12.0-slim-bullseye AS builder
 
-# Set the working directory
 WORKDIR /app
 
-# Define build arguments
-ARG AWS_REGION
-ARG AWS_ACCESS_KEY_ID
-ARG AWS_SECRET_ACCESS_KEY
-
-# Set environment variables
-ENV AWS_REGION=${AWS_REGION}
-ENV AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-ENV AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-ENV AWS_LAMBDA_FUNCTION_HANDLER=server.main:app
-ENV AWS_LWA_INVOKE_MODE=RESPONSE_STREAM
-ENV PORT=8000
-ENV UVICORN_APP=server.main:app
-
 # Install poetry
-RUN pip install poetry
+RUN pip install --no-cache-dir poetry
 
-# Copy poetry files
+# Copy only dependency files first
 COPY pyproject.toml poetry.lock ./
 
-# Configure poetry to not create a virtual environment in the container
-RUN poetry config virtualenvs.create false
-
 # Install dependencies
-RUN poetry install --no-interaction --no-ansi --no-root
+RUN poetry config virtualenvs.create false \
+    && poetry install --no-interaction --no-ansi --no-root
+
+# Final stage
+FROM public.ecr.aws/docker/library/python:3.12.0-slim-bullseye
+
+# Copy the Lambda adapter
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.8.4 /lambda-adapter /opt/extensions/lambda-adapter
+
+# Copy Python packages from builder
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+
+WORKDIR /app
+
+# Set environment variables in a single layer
+ENV AWS_LAMBDA_FUNCTION_HANDLER=server.main:app \
+    AWS_LWA_INVOKE_MODE=RESPONSE_STREAM \
+    PORT=8000 \
+    UVICORN_APP=server.main:app
 
 # Copy application code
 COPY . .
 
-# Expose the port FastAPI will run on
+# AWS credentials should be handled by IAM roles instead of environment variables
+ARG AWS_REGION
+ENV AWS_REGION=${AWS_REGION}
+
 EXPOSE 8000
 
-# Run the FastAPI app using the server's main block
 CMD ["python", "server/main.py"]
