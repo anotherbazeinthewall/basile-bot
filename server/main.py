@@ -4,6 +4,7 @@ import datetime
 import os
 from pathlib import Path
 from contextlib import asynccontextmanager
+from functools import lru_cache
 
 # Initialize timing
 startup_time = time.time()
@@ -31,11 +32,28 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, FileResponse, StreamingResponse
 log_time("FastAPI and dependencies imported")
 
-from linkedin import pull_linkedin
-from github import pull_github
-from resume import pull_resume
-from generator import generate_stream
-log_time("Local modules imported")
+# Remove direct imports and replace with lazy loading functions
+@lru_cache()
+def get_linkedin():
+    from linkedin import pull_linkedin
+    return pull_linkedin
+
+@lru_cache()
+def get_github():
+    from github import pull_github
+    return pull_github
+
+@lru_cache()
+def get_resume():
+    from resume import pull_resume
+    return pull_resume
+
+@lru_cache()
+def get_generator():
+    from generator import generate_stream
+    return generate_stream
+
+log_time("Lazy loading functions defined")
 
 # Get the project root directory
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -102,7 +120,8 @@ async def serve_client_files(filename: str):
 
 @app.get("/api/resume")
 async def send_resume():
-    resume = pull_resume()
+    resume_func = get_resume()
+    resume = resume_func()
     return Response(
         content=resume,
         media_type="text/plain",
@@ -113,7 +132,8 @@ async def send_resume():
 
 @app.get("/api/github")
 def pull_github_digest():
-    github = pull_github()
+    github_func = get_github()
+    github = github_func()
     return Response(
         content=github,
         media_type="text/plain",
@@ -124,7 +144,8 @@ def pull_github_digest():
 
 @app.get("/api/linkedin")
 def get_linkedin_digest():
-    linkedin = pull_linkedin()
+    linkedin_func = get_linkedin()
+    linkedin = linkedin_func()
     return Response(
         content=linkedin,
         media_type="text/plain",
@@ -137,8 +158,9 @@ def get_linkedin_digest():
 async def chat_completion(request: ChatRequest):
     try:
         messages = [msg.model_dump() for msg in request.messages]
+        generator = get_generator()
         return StreamingResponse(
-            generate_stream(messages),
+            generator(messages),
             media_type="text/event-stream",
             headers={
                 'Cache-Control': 'no-cache',
