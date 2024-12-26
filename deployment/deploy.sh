@@ -131,6 +131,16 @@ wait_for_lambda_ready() {
     return 1
 }
 
+# Function to apply tags
+apply_tags() {
+    local resource_arn=$1
+    local region=$2
+    aws resourcegroupstaggingapi tag-resources \
+        --resource-arn-list "$resource_arn" \
+        --tags "Application=$APP_NAME" \
+        --region "$region"
+}
+
 ###########################################
 # Main Script
 ###########################################
@@ -249,8 +259,23 @@ REPO_URI="$ECR_REGISTRY/$REPO_NAME"
 if ! aws ecr describe-repositories --repository-names $REPO_NAME &>/dev/null; then
     aws ecr create-repository --repository-name $REPO_NAME --region $AWS_REGION
     echo "Created repository: $REPO_NAME"
+else
+    echo "ECR repository $REPO_NAME already exists."
 fi
 
+# Tag the ECR repository
+echo "Tagging ECR repository..."
+ECR_REPOSITORY_ARN=$(aws ecr describe-repositories \
+    --repository-names "$REPO_NAME" \
+    --region "$AWS_REGION" \
+    --query "repositories[0].repositoryArn" --output text)
+    
+aws ecr tag-resource \
+    --resource-arn "$ECR_REPOSITORY_ARN" \
+    --tags Key=Application,Value="$APP_NAME"
+echo "✓ Tagged ECR repository: $ECR_REPOSITORY_ARN"
+
+# Save the repository URI to the configuration
 save_configuration
 echo "ECR setup complete. Repository URI: $REPO_URI"
 
@@ -265,77 +290,85 @@ echo "Docker image pushed to $REPO_URI"
 # Step 6: IAM Setup
 echo -e "\n📋 Setting up IAM roles and policies..."
 
+# Create the trust policy document
 cat > trust-policy.json << EOF
 {
     "Version": "2012-10-17",
-    "Statement": [{"Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}]
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+        }
+    ]
 }
 EOF
 
+# Create the Bedrock policy document
 cat > bedrock-policy.json << EOF
 {
     "Version": "2012-10-17",
-    "Statement": [{"Effect": "Allow", "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"], "Resource": "*"}]
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "bedrock:InvokeModel",
+                "bedrock:InvokeModelWithResponseStream"
+            ],
+            "Resource": "*"
+        }
+    ]
 }
 EOF
 
+# Create or validate the IAM role
 if ! aws iam get-role --role-name $ROLE_NAME &>/dev/null; then
     aws iam create-role --role-name $ROLE_NAME --assume-role-policy-document file://trust-policy.json
-    echo "Created role: $ROLE_NAME"
+    echo "Created IAM role: $ROLE_NAME"
     # Add a delay to allow IAM role to propagate
     echo "Waiting for IAM role to propagate..."
     sleep 10
+else
+    echo "IAM role $ROLE_NAME already exists."
 fi
 
+# Tag the IAM role
+echo "Tagging IAM role..."
+aws iam tag-role \
+    --role-name "$ROLE_NAME" \
+    --tags "Key=Application,Value=$APP_NAME"
+echo "✓ Tagged IAM role: $ROLE_NAME"
+
+# Create or validate the Bedrock policy
 POLICY_ARN="arn:aws:iam::$AWS_ACCOUNT_ID:policy/$POLICY_NAME"
 if ! aws iam get-policy --policy-arn $POLICY_ARN &>/dev/null; then
     aws iam create-policy --policy-name $POLICY_NAME --policy-document file://bedrock-policy.json
-    echo "Created policy: $POLICY_NAME"
+    echo "Created IAM policy: $POLICY_NAME"
 else
-    echo "Policy already exists: $POLICY_NAME"
+    echo "IAM policy $POLICY_NAME already exists."
 fi
 
+# Tag the IAM policy
+echo "Tagging IAM policy..."
+aws iam tag-policy \
+    --policy-arn "$POLICY_ARN" \
+    --tags "Key=Application,Value=$APP_NAME"
+echo "✓ Tagged IAM policy: $POLICY_NAME"
+
+# Attach the required policies to the IAM role
 aws iam attach-role-policy --role-name $ROLE_NAME --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 aws iam attach-role-policy --role-name $ROLE_NAME --policy-arn $POLICY_ARN
 ROLE_ARN="arn:aws:iam::$AWS_ACCOUNT_ID:role/$ROLE_NAME"
 
+# Save the configuration
 save_configuration
 
 # Wait for IAM role and policy attachments to propagate
 echo "Waiting for IAM role and policy attachments to propagate..."
 sleep 10
 echo "IAM setup complete. Role ARN: $ROLE_ARN"
-
-# Step 7: Lambda Deployment
-echo -e "\n📋 Setting up Lambda function..."
-
-if aws lambda get-function --function-name $FUNCTION_NAME 2>/dev/null; then
-    echo "Function $FUNCTION_NAME exists, updating function..."
-    wait_for_lambda_ready $FUNCTION_NAME
-    aws lambda update-function-code \
-        --function-name $FUNCTION_NAME \
-        --image-uri $REPO_URI:latest
-    
-    wait_for_lambda_ready $FUNCTION_NAME
-    aws lambda update-function-configuration \
-        --function-name $FUNCTION_NAME \
-        --timeout $TIMEOUT \
-        --memory-size $MEMORY_SIZE \
-        --environment "Variables={AWS_LAMBDA_FUNCTION_HANDLER=server.app}"
-else
-    echo "Creating Lambda function $FUNCTION_NAME..."
-    aws lambda create-function \
-        --function-name $FUNCTION_NAME \
-        --package-type Image \
-        --code ImageUri=$REPO_URI:latest \
-        --role $ROLE_ARN \
-        --timeout $TIMEOUT \
-        --memory-size $MEMORY_SIZE \
-        --environment "Variables={AWS_LAMBDA_FUNCTION_HANDLER=server.app}"
-fi
-
-# Wait for function to be ready before setting up URL
-wait_for_lambda_ready $FUNCTION_NAME
 
 # Setup Function URL
 echo "Setting up Lambda Function URL..."
@@ -381,6 +414,8 @@ fi
 
 # Remove trailing slash if present
 FUNCTION_URL="${FUNCTION_URL%/}"
+
+# Save the configuration
 save_configuration
 echo "Lambda function setup complete."
 
@@ -438,6 +473,14 @@ aws events put-rule \
     --description "Keeps ${FUNCTION_NAME} warm by invoking it periodically" \
     || handle_error "CloudWatch Events rule creation/update" $?
 
+# Tag the CloudWatch Events rule
+echo "Tagging CloudWatch Events rule..."
+RULE_ARN="arn:aws:events:$AWS_REGION:$AWS_ACCOUNT_ID:rule/$RULE_NAME"
+aws events tag-resource \
+    --resource-arn "$RULE_ARN" \
+    --tags "Key=Application,Value=$APP_NAME"
+echo "✓ Tagged CloudWatch Events rule: $RULE_NAME"
+
 # Check existing Lambda permissions
 EXISTING_PERMISSION=$(aws lambda get-policy \
     --function-name "$FUNCTION_NAME" \
@@ -454,13 +497,13 @@ else
     echo "Adding new Lambda permission..."
 fi
 
-# Add permission
+# Add permission for CloudWatch Events to invoke the Lambda function
 aws lambda add-permission \
     --function-name "$FUNCTION_NAME" \
     --statement-id "WarmupPermission" \
     --action "lambda:InvokeFunction" \
     --principal events.amazonaws.com \
-    --source-arn "arn:aws:events:${AWS_REGION}:${AWS_ACCOUNT_ID}:rule/${RULE_NAME}" \
+    --source-arn "$RULE_ARN" \
     --region "$AWS_REGION" \
     || handle_error "Lambda permission update" $?
 
@@ -484,12 +527,20 @@ fi
 WARMUP_INPUT="{\"warmup\":true}"
 ESCAPED_INPUT=$(echo "$WARMUP_INPUT" | jq -c -R .)
 
-# Add target with properly escaped input
+# Add the Lambda function as the target for the CloudWatch Events rule
 aws events put-targets \
     --rule "$RULE_NAME" \
     --targets Id=1,Arn="arn:aws:lambda:${AWS_REGION}:${AWS_ACCOUNT_ID}:function:${FUNCTION_NAME}",Input=$ESCAPED_INPUT \
     --region "$AWS_REGION" \
     || handle_error "CloudWatch Events target update" $?
+
+# Tag the target (if applicable)
+echo "Tagging CloudWatch Events target..."
+TARGET_ARN="arn:aws:lambda:${AWS_REGION}:${AWS_ACCOUNT_ID}:function:${FUNCTION_NAME}"
+aws lambda tag-resource \
+    --resource "$TARGET_ARN" \
+    --tags "Application=$APP_NAME"
+echo "✓ Tagged CloudWatch Events target: $TARGET_ARN"
 
 echo "✓ Warm-up rule configured successfully"
 echo "  - Rule Name: $RULE_NAME"
