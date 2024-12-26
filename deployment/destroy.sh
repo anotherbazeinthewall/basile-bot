@@ -17,6 +17,14 @@ $DEBUG && set -x
 
 export AWS_PAGER="cat"
 
+NO_INTERACTION=false
+while getopts "dn" opt; do
+case $opt in
+    d) DEBUG=true ;;
+    n) NO_INTERACTION=true ;;
+esac
+done
+
 ###########################################
 # Function Definitions
 ###########################################
@@ -25,11 +33,16 @@ export AWS_PAGER="cat"
 handle_error() {
     echo "Error occurred during: $1"
     echo "Error message: $2"
-    read -p "Continue with teardown? [y/N] " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Teardown cancelled."
-        exit 1
+    if [ "$NO_INTERACTION" = true ]; then
+        echo "Continuing with teardown (no-interaction mode)..."
+        return 0
+    else
+        read -p "Continue with teardown? [y/N] " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "Teardown cancelled."
+            exit 1
+        fi
     fi
 }
 
@@ -78,11 +91,13 @@ load_configuration
 
 echo "Starting teardown of $APP_NAME resources..."
 echo "This will remove ALL resources created by the setup scripts."
-read -p "Are you sure you want to proceed? [y/N] " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Teardown cancelled."
-    exit 1
+if [ "$NO_INTERACTION" = false ]; then
+    read -p "Are you sure you want to proceed? [Y/n] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Nn]$ ]]; then
+        echo "Teardown cancelled."
+        exit 1
+    fi
 fi
 
 # 1. Delete Lambda function URL
@@ -149,7 +164,49 @@ else
     echo "→ No ECR repository to delete"
 fi
 
-# 6. Clean up local configuration
+# 6. Delete CloudWatch Events warm-up rule
+echo -e "\n📋 Step 6: Deleting warm-up rule resources..."
+RULE_NAME="${APP_NAME}-warmup"
+
+# Remove Lambda permission for warm-up rule
+if aws lambda get-policy --function-name $FUNCTION_NAME 2>/dev/null | grep -q "WarmupPermission"; then
+    echo "Removing Lambda permission for warm-up rule..."
+    aws lambda remove-permission \
+        --function-name $FUNCTION_NAME \
+        --statement-id "WarmupPermission" \
+        --region "$AWS_REGION" \
+        || handle_error "Lambda permission removal" "$?"
+    echo "✓ Warm-up Lambda permission removed"
+else
+    echo "→ No warm-up Lambda permission to remove"
+fi
+
+# Remove targets from rule
+if aws events list-targets-by-rule --rule "$RULE_NAME" --region "$AWS_REGION" 2>/dev/null | grep -q "Id"; then
+    echo "Removing warm-up rule targets..."
+    aws events remove-targets \
+        --rule "$RULE_NAME" \
+        --ids "1" \
+        --region "$AWS_REGION" \
+        || handle_error "CloudWatch Events target removal" "$?"
+    echo "✓ Warm-up rule targets removed"
+else
+    echo "→ No warm-up rule targets to remove"
+fi
+
+# Delete the rule
+if aws events describe-rule --name "$RULE_NAME" --region "$AWS_REGION" 2>/dev/null; then
+    echo "Deleting warm-up rule..."
+    aws events delete-rule \
+        --name "$RULE_NAME" \
+        --region "$AWS_REGION" \
+        || handle_error "CloudWatch Events rule deletion" "$?"
+    echo "✓ Warm-up rule deleted"
+else
+    echo "→ No warm-up rule to delete"
+fi
+
+# 7. Clean up local configuration
 echo -e "\n📋 Step 6: Cleaning up local configuration..."
 rm -f config.json
 rm -f trust-policy.json
