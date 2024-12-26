@@ -154,14 +154,6 @@ if ! command -v jq &> /dev/null; then
 fi
 echo "✓ jq is available"
 
-# # Export requirements
-# echo "Exporting requirements..."
-# if ! (cd "$PROJECT_ROOT" && poetry export -f requirements.txt --output requirements.txt --without-hashes); then
-#     echo "⚠️  Failed to export requirements. Continuing anyway..."
-# else
-#     echo "✓ Requirements exported"
-# fi
-
 # Load existing configuration
 echo "Loading configuration..."
 if ! load_configuration; then
@@ -426,5 +418,82 @@ while [ $attempt -le $max_attempts ]; do
     sleep $wait_time
     attempt=$((attempt + 1))
 done
+
+# Step 9: Configure Warm-up Rule
+echo -e "\n📋 Setting up warm-up rule..."
+RULE_NAME="${APP_NAME}-warmup"
+
+# Check if the rule exists
+if aws events describe-rule --name "$RULE_NAME" --region "$AWS_REGION" &>/dev/null; then
+    echo "Updating existing warm-up rule: $RULE_NAME"
+else
+    echo "Creating new warm-up rule: $RULE_NAME"
+fi
+
+# Create or update the CloudWatch Events rule
+aws events put-rule \
+    --name "$RULE_NAME" \
+    --schedule-expression "rate(10 minutes)" \
+    --region "$AWS_REGION" \
+    --description "Keeps ${FUNCTION_NAME} warm by invoking it periodically" \
+    || handle_error "CloudWatch Events rule creation/update" $?
+
+# Check existing Lambda permissions
+EXISTING_PERMISSION=$(aws lambda get-policy \
+    --function-name "$FUNCTION_NAME" \
+    --region "$AWS_REGION" 2>/dev/null | jq -r '.Policy' | jq -r '.Statement[] | select(.Sid == "WarmupPermission")' 2>/dev/null)
+
+if [ ! -z "$EXISTING_PERMISSION" ]; then
+    echo "Updating existing Lambda permission..."
+    aws lambda remove-permission \
+        --function-name "$FUNCTION_NAME" \
+        --statement-id "WarmupPermission" \
+        --region "$AWS_REGION" \
+        || handle_error "Lambda permission removal" $?
+else
+    echo "Adding new Lambda permission..."
+fi
+
+# Add permission
+aws lambda add-permission \
+    --function-name "$FUNCTION_NAME" \
+    --statement-id "WarmupPermission" \
+    --action "lambda:InvokeFunction" \
+    --principal events.amazonaws.com \
+    --source-arn "arn:aws:events:${AWS_REGION}:${AWS_ACCOUNT_ID}:rule/${RULE_NAME}" \
+    --region "$AWS_REGION" \
+    || handle_error "Lambda permission update" $?
+
+# Check existing targets
+EXISTING_TARGET=$(aws events list-targets-by-rule \
+    --rule "$RULE_NAME" \
+    --region "$AWS_REGION" 2>/dev/null | jq -r '.Targets[] | select(.Id == "1")' 2>/dev/null)
+
+if [ ! -z "$EXISTING_TARGET" ]; then
+    echo "Updating existing CloudWatch Events target..."
+    aws events remove-targets \
+        --rule "$RULE_NAME" \
+        --ids "1" \
+        --region "$AWS_REGION" \
+        || handle_error "CloudWatch Events target removal" $?
+else
+    echo "Adding new CloudWatch Events target..."
+fi
+
+# Create the input JSON and properly escape it
+WARMUP_INPUT="{\"warmup\":true}"
+ESCAPED_INPUT=$(echo "$WARMUP_INPUT" | jq -c -R .)
+
+# Add target with properly escaped input
+aws events put-targets \
+    --rule "$RULE_NAME" \
+    --targets Id=1,Arn="arn:aws:lambda:${AWS_REGION}:${AWS_ACCOUNT_ID}:function:${FUNCTION_NAME}",Input=$ESCAPED_INPUT \
+    --region "$AWS_REGION" \
+    || handle_error "CloudWatch Events target update" $?
+
+echo "✓ Warm-up rule configured successfully"
+echo "  - Rule Name: $RULE_NAME"
+echo "  - Schedule: Every 10 minutes"
+echo "  - Target: $FUNCTION_NAME"
 
 echo "🎉 Setup Complete! Your application is available at $FUNCTION_URL"
