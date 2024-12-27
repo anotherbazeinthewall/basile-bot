@@ -173,9 +173,15 @@ echo "------------------------------------------------------------"
 
 # Step 1: Interactive configuration
 echo "Starting interactive configuration..."
+
+# Get default AWS account ID
 DEFAULT_AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text || echo "")
+
+# Get default AWS region from the CLI configuration
+DEFAULT_AWS_REGION=$(aws configure get region || echo "us-west-2")
+
 AWS_ACCOUNT_ID=$(prompt_with_default "AWS Account ID" "${AWS_ACCOUNT_ID:-$DEFAULT_AWS_ACCOUNT_ID}")
-AWS_REGION=$(prompt_with_default "AWS Region" "${AWS_REGION:-us-west-2}")
+AWS_REGION=$(prompt_with_default "AWS Region" "${AWS_REGION:-$DEFAULT_AWS_REGION}")
 APP_NAME=$(prompt_with_default "Application name" "${APP_NAME:-basile-bot}")
 MEMORY_SIZE=$(prompt_with_default "Lambda memory size (MB)" "${MEMORY_SIZE:-1024}")
 TIMEOUT=$(prompt_with_default "Lambda timeout (seconds)" "${TIMEOUT:-900}")
@@ -269,11 +275,16 @@ ECR_REPOSITORY_ARN=$(aws ecr describe-repositories \
     --repository-names "$REPO_NAME" \
     --region "$AWS_REGION" \
     --query "repositories[0].repositoryArn" --output text)
-    
-aws ecr tag-resource \
-    --resource-arn "$ECR_REPOSITORY_ARN" \
-    --tags Key=Application,Value="$APP_NAME"
-echo "✓ Tagged ECR repository: $ECR_REPOSITORY_ARN"
+
+if [ -n "$ECR_REPOSITORY_ARN" ]; then
+    aws ecr tag-resource \
+        --resource-arn "$ECR_REPOSITORY_ARN" \
+        --tags Key=Application,Value="$APP_NAME" \
+        || echo "Warning: Failed to tag ECR repository"
+    echo "✓ Tagged ECR repository: $ECR_REPOSITORY_ARN"
+else
+    echo "❌ Failed to get ECR repository ARN"
+fi
 
 # Save the repository URI to the configuration
 save_configuration
@@ -289,7 +300,6 @@ echo "Docker image pushed to $REPO_URI"
 
 # Step 6: IAM Setup
 echo -e "\n📋 Setting up IAM roles and policies..."
-
 # Create the trust policy document
 cat > trust-policy.json << EOF
 {
@@ -338,7 +348,8 @@ fi
 echo "Tagging IAM role..."
 aws iam tag-role \
     --role-name "$ROLE_NAME" \
-    --tags "Key=Application,Value=$APP_NAME"
+    --tags Key=Application,Value="$APP_NAME" \
+    || echo "Warning: Failed to tag IAM role"
 echo "✓ Tagged IAM role: $ROLE_NAME"
 
 # Create or validate the Bedrock policy
@@ -349,13 +360,6 @@ if ! aws iam get-policy --policy-arn $POLICY_ARN &>/dev/null; then
 else
     echo "IAM policy $POLICY_NAME already exists."
 fi
-
-# Tag the IAM policy
-echo "Tagging IAM policy..."
-aws iam tag-policy \
-    --policy-arn "$POLICY_ARN" \
-    --tags "Key=Application,Value=$APP_NAME"
-echo "✓ Tagged IAM policy: $POLICY_NAME"
 
 # Attach the required policies to the IAM role
 aws iam attach-role-policy --role-name $ROLE_NAME --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
@@ -369,6 +373,46 @@ save_configuration
 echo "Waiting for IAM role and policy attachments to propagate..."
 sleep 10
 echo "IAM setup complete. Role ARN: $ROLE_ARN"
+
+# Step 7: Lambda Deployment
+echo -e "\n📋 Setting up Lambda function..."
+
+# Check if the Lambda function exists
+if aws lambda get-function --function-name $FUNCTION_NAME &>/dev/null; then
+    echo "Function $FUNCTION_NAME exists, updating function..."
+    wait_for_lambda_ready $FUNCTION_NAME
+    aws lambda update-function-code \
+        --function-name $FUNCTION_NAME \
+        --image-uri $REPO_URI:latest
+    wait_for_lambda_ready $FUNCTION_NAME
+    aws lambda update-function-configuration \
+        --function-name $FUNCTION_NAME \
+        --timeout $TIMEOUT \
+        --memory-size $MEMORY_SIZE \
+        --environment "Variables={AWS_LAMBDA_FUNCTION_HANDLER=server.app}"
+else
+    echo "Creating Lambda function $FUNCTION_NAME..."
+    aws lambda create-function \
+        --function-name $FUNCTION_NAME \
+        --package-type Image \
+        --code ImageUri=$REPO_URI:latest \
+        --role $ROLE_ARN \
+        --timeout $TIMEOUT \
+        --memory-size $MEMORY_SIZE \
+        --environment "Variables={AWS_LAMBDA_FUNCTION_HANDLER=server.app}"
+fi
+
+# Wait for the function to be ready
+wait_for_lambda_ready $FUNCTION_NAME
+
+# Tag the Lambda function
+echo "Tagging Lambda function..."
+LAMBDA_ARN="arn:aws:lambda:$AWS_REGION:$AWS_ACCOUNT_ID:function:$FUNCTION_NAME"
+aws lambda tag-resource \
+    --resource "$LAMBDA_ARN" \
+    --tags Key=Application,Value="$APP_NAME" \
+    || echo "Warning: Failed to tag Lambda function"
+echo "✓ Tagged Lambda function: $FUNCTION_NAME"
 
 # Setup Function URL
 echo "Setting up Lambda Function URL..."
@@ -390,7 +434,6 @@ if ! FUNCTION_URL=$(aws lambda get-function-url-config --function-name $FUNCTION
         --principal "*" \
         --function-url-auth-type NONE \
         --output text
-    
     echo "Created new Function URL: $FUNCTION_URL"
 else
     echo "Updating existing Function URL configuration..."
@@ -399,7 +442,6 @@ else
         --cors '{"AllowOrigins": ["*"], "AllowMethods": ["*"], "AllowHeaders": ["*"]}' \
         --invoke-mode RESPONSE_STREAM \
         >/dev/null
-    
     echo "Using existing Function URL: $FUNCTION_URL"
     
     # Ensure permissions exist even for existing URL
@@ -458,27 +500,22 @@ done
 echo -e "\n📋 Setting up warm-up rule..."
 RULE_NAME="${APP_NAME}-warmup"
 
-# Check if the rule exists
-if aws events describe-rule --name "$RULE_NAME" --region "$AWS_REGION" &>/dev/null; then
-    echo "Updating existing warm-up rule: $RULE_NAME"
-else
-    echo "Creating new warm-up rule: $RULE_NAME"
-fi
-
-# Create or update the CloudWatch Events rule
-aws events put-rule \
+# Create or update the CloudWatch Events rule and capture the ARN
+RULE_ARN=$(aws events put-rule \
     --name "$RULE_NAME" \
     --schedule-expression "rate(10 minutes)" \
     --region "$AWS_REGION" \
     --description "Keeps ${FUNCTION_NAME} warm by invoking it periodically" \
+    --query 'RuleArn' \
+    --output text) \
     || handle_error "CloudWatch Events rule creation/update" $?
 
 # Tag the CloudWatch Events rule
 echo "Tagging CloudWatch Events rule..."
-RULE_ARN="arn:aws:events:$AWS_REGION:$AWS_ACCOUNT_ID:rule/$RULE_NAME"
 aws events tag-resource \
     --resource-arn "$RULE_ARN" \
-    --tags "Key=Application,Value=$APP_NAME"
+    --tags Key=Application,Value="$APP_NAME" \
+    || echo "Warning: Failed to tag CloudWatch Events rule"
 echo "✓ Tagged CloudWatch Events rule: $RULE_NAME"
 
 # Check existing Lambda permissions
@@ -534,17 +571,10 @@ aws events put-targets \
     --region "$AWS_REGION" \
     || handle_error "CloudWatch Events target update" $?
 
-# Tag the target (if applicable)
-echo "Tagging CloudWatch Events target..."
-TARGET_ARN="arn:aws:lambda:${AWS_REGION}:${AWS_ACCOUNT_ID}:function:${FUNCTION_NAME}"
-aws lambda tag-resource \
-    --resource "$TARGET_ARN" \
-    --tags "Application=$APP_NAME"
-echo "✓ Tagged CloudWatch Events target: $TARGET_ARN"
+# Note: Removed redundant Lambda function tagging since it's already tagged in the Lambda section
 
 echo "✓ Warm-up rule configured successfully"
-echo "  - Rule Name: $RULE_NAME"
-echo "  - Schedule: Every 10 minutes"
-echo "  - Target: $FUNCTION_NAME"
-
+echo " - Rule Name: $RULE_NAME"
+echo " - Schedule: Every 10 minutes"
+echo " - Target: $FUNCTION_NAME"
 echo "🎉 Setup Complete! Your application is available at $FUNCTION_URL"
