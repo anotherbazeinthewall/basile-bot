@@ -577,4 +577,32 @@ echo "✓ Warm-up rule configured successfully"
 echo " - Rule Name: $RULE_NAME"
 echo " - Schedule: Every 10 minutes"
 echo " - Target: $FUNCTION_NAME"
+
+# Step 10: Resource Tag Verification
+echo -e "\n📋 Verifying resource tagging..."
+echo "Listing all resources tagged with Application=$APP_NAME"
+
+# Get all tagged resources
+echo "----------------------------------------"
+echo "Tagged Resources Summary:"
+echo "----------------------------------------"
+aws resourcegroupstaggingapi get-resources \
+    --tag-filters Key=Application,Values="$APP_NAME" \
+    --region "$AWS_REGION" \
+    --query 'ResourceTagMappingList[].{
+        Resource: ResourceARN,
+        Tags: Tags[?Key==`Application`].Value | [0]
+    }' \
+    --output table
+
+# Get detailed YAML view
+echo -e "\nDetailed Resource Tags:"
+echo "----------------------------------------"
+aws resourcegroupstaggingapi get-resources \
+    --tag-filters Key=Application,Values="$APP_NAME" \
+    --region "$AWS_REGION" \
+    --output yaml
+
+echo -e "\n✓ Resource tag verification complete"
+
 echo "🎉 Setup Complete! Your application is available at $FUNCTION_URL"
