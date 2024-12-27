@@ -6,24 +6,18 @@ cd "$(dirname "$0")"
 # Get project root directory (one level up)
 PROJECT_ROOT="$(cd .. && pwd)"
 
-# Debug mode handling
+# Debug and interaction mode handling
 DEBUG=false
-while getopts "d" opt; do
-    case $opt in
-        d) DEBUG=true ;;
-    esac
+NO_INTERACTION=false
+while getopts "dn" opt; do
+  case $opt in
+    d) DEBUG=true ;;
+    n) NO_INTERACTION=true ;;
+  esac
 done
 $DEBUG && set -x
 
 export AWS_PAGER="cat"
-
-NO_INTERACTION=false
-while getopts "dn" opt; do
-case $opt in
-    d) DEBUG=true ;;
-    n) NO_INTERACTION=true ;;
-esac
-done
 
 ###########################################
 # Function Definitions
