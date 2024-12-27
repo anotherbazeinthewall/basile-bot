@@ -102,7 +102,6 @@ log_time("CORS configured")
 async def health_check():
     return {
         "status": "healthy",
-        "service": "fast-chat",
         "timestamp": datetime.datetime.now().isoformat()
     }
 
