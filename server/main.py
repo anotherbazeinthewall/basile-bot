@@ -78,7 +78,7 @@ app = FastAPI(lifespan=lifespan)
 log_time("FastAPI app created")
 
 # Mount static files using absolute path
-app.mount("/static", StaticFiles(directory=str(PROJECT_ROOT / "client")), name="static")
+app.mount("/static", StaticFiles(directory=str(PROJECT_ROOT / "frontend")), name="static")
 log_time("Static files mounted")
 
 # Configure CORS
@@ -107,11 +107,11 @@ async def health_check():
 
 @app.get("/")
 async def read_root():
-    return FileResponse(str(PROJECT_ROOT / "client" / "index.html"))
+    return FileResponse(str(PROJECT_ROOT / "frontend" / "index.html"))
 
 @app.get("/{filename}")
-async def serve_client_files(filename: str):
-    response = FileResponse(str(PROJECT_ROOT / "client" / filename))
+async def serve_frontend_files(filename: str):
+    response = FileResponse(str(PROJECT_ROOT / "frontend" / filename))
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
