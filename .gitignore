@@ -1,6 +1,6 @@
 .DS_Store
 .venv/
-archive/
+.archive/
 __pycache__/
 *.py[cod]
 *$py.class
