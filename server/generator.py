@@ -1,16 +1,24 @@
-import os, boto3, json
+import boto3, json
 from botocore.config import Config
 
 def _get_clients():
-    args = {'region_name': os.getenv("AWS_REGION", "us-west-2")}
-    if not os.getenv('AWS_LAMBDA_FUNCTION_NAME'):
-        args.update(aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-                   aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"))
+    # Use the 'bedrock' profile from credentials file and explicitly set region
+    session = boto3.Session(
+        profile_name='bedrock',
+        region_name='us-west-2'  # Explicitly set region for Bedrock
+    )
     
-    s = boto3.Session()
-    runtime_args = args.copy()
-    runtime_args['config'] = Config(read_timeout=300, connect_timeout=300, retries={'max_attempts': 0})
-    return s.client('bedrock', **args), s.client('bedrock-runtime', **runtime_args)
+    # Configure the runtime client with timeouts
+    runtime_config = Config(
+        read_timeout=300,
+        connect_timeout=300,
+        retries={'max_attempts': 0}
+    )
+    
+    return (
+        session.client('bedrock'),
+        session.client('bedrock-runtime', config=runtime_config)
+    )
 
 bedrock, runtime = _get_clients()
 MODEL_ID = "anthropic.claude-3-5-haiku-20241022-v1:0"
@@ -27,7 +35,6 @@ def generate_stream(messages, max_gen_len=1024, temperature=0.9):
         
         for e in response.get('stream', []):
             if text := e.get('contentBlockDelta', {}).get('delta', {}).get('text', ''):
-                # Properly serialize the JSON response
                 chunk = {
                     "choices": [{
                         "delta": {
@@ -39,7 +46,7 @@ def generate_stream(messages, max_gen_len=1024, temperature=0.9):
                 
         yield 'data: [DONE]\n\n'
     except Exception as e:
-        print(f"Generation error: {str(e)}")  # Log the actual error
+        print(f"Generation error: {str(e)}")
         yield 'data: [ERROR]\n\n'
 
 if __name__ == "__main__":
