@@ -6,8 +6,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, FileResponse, StreamingResponse
 
-PROJECT_ROOT = Path(__file__).parent.parent
-
 class Message(BaseModel):
     role: str
     content: str
@@ -30,6 +28,8 @@ app.add_middleware(
     allow_credentials=True,
     max_age=86400
 )
+
+PROJECT_ROOT = Path(__file__).parent.parent
 
 @app.get("/")
 async def read_root():
