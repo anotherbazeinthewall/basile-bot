@@ -1,14 +1,12 @@
 version: "3.9"
 services:
-  basile-bot:
-    image: basile-bot-serverless
+  basilebot:
+    image: basilebot
     build:
       context: .
       dockerfile: Dockerfile
       args:
         AWS_REGION: ${AWS_REGION}
-        AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-        AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
     x-bake:
       platforms:
         - linux/amd64
@@ -19,3 +17,7 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    volumes:
+      - ~/.aws:/root/.aws:ro # Mount AWS credentials for local development
+    environment:
+      - AWS_REGION=${AWS_REGION}
