@@ -1,23 +1,18 @@
 version: "3.9"
+
 services:
-  basilebot:
-    image: basilebot
+  app:
+    image: ${COMPOSE_PROJECT_NAME}
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        AWS_REGION: ${AWS_REGION}
-    x-bake:
-      platforms:
-        - linux/amd64
-      build-args:
-        BUILDKIT_INLINE_CACHE: "1"
-      provenance: false
+      x-bake:
+        platforms:
+          - linux/amd64
+        build-args:
+          BUILDKIT_INLINE_CACHE: "1"
+        provenance: false
     ports:
       - "8000:8000"
-    env_file:
-      - .env
     volumes:
-      - ~/.aws:/root/.aws:ro # Mount AWS credentials for local development
-    environment:
-      - AWS_REGION=${AWS_REGION}
+      - ~/.aws:/root/.aws:ro
