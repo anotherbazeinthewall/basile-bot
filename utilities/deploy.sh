@@ -220,7 +220,7 @@ fi
 
 # Save configuration
 save_configuration
-echo "Configuration saved to deployment/config.json"
+echo "Configuration saved to utilities/config.json"
 echo "------------------------------------------------------------"
 
 ###########################################

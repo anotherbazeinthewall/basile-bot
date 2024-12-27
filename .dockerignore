@@ -8,9 +8,8 @@ Dockerfile
 .dockerignore
 docker-compose.yml
 
-# Development and deployment
-deployment/
-archive/
+# Utilities
+utilities/
 
 # Python
 **/__pycache__
