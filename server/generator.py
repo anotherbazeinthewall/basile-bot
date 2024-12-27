@@ -1,22 +1,25 @@
 import boto3, json
 from botocore.config import Config
+from botocore.exceptions import ProfileNotFound
 
 def _get_clients():
-    # Use the 'bedrock' profile from credentials file and explicitly set region
-    session = boto3.Session(
-        profile_name='bedrock',
-        region_name='us-west-2'  # Explicitly set region for Bedrock
-    )
-    
     # Configure the runtime client with timeouts
     runtime_config = Config(
+        region_name='us-west-2',  # Always use us-west-2 for Bedrock
         read_timeout=300,
         connect_timeout=300,
         retries={'max_attempts': 0}
     )
     
+    try:
+        # Try to use bedrock profile first
+        session = boto3.Session(profile_name='bedrock')
+    except ProfileNotFound:
+        # Fall back to default credentials (IAM role or default profile)
+        session = boto3.Session()
+    
     return (
-        session.client('bedrock'),
+        session.client('bedrock', config=runtime_config),
         session.client('bedrock-runtime', config=runtime_config)
     )
 
