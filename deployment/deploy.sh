@@ -3,17 +3,21 @@ set -e # Exit on error
 
 # Change to script's directory
 cd "$(dirname "$0")"
+
 # Get project root directory (one level up)
 PROJECT_ROOT="$(cd .. && pwd)"
+
+# Get default app name from directory
+DEFAULT_APP_NAME=$(basename "$PROJECT_ROOT" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')
 
 # Debug and interaction mode handling
 DEBUG=false
 NO_INTERACTION=false
 while getopts "dn" opt; do
-    case $opt in
-        d) DEBUG=true ;;
-        n) NO_INTERACTION=true ;;
-    esac
+  case $opt in
+    d) DEBUG=true ;;
+    n) NO_INTERACTION=true ;;
+  esac
 done
 $DEBUG && set -x
 
@@ -131,48 +135,42 @@ wait_for_lambda_ready() {
     return 1
 }
 
-# Function to apply tags
-apply_tags() {
-    local resource_arn=$1
-    local region=$2
-    aws resourcegroupstaggingapi tag-resources \
-        --resource-arn-list "$resource_arn" \
-        --tags "Application=$APP_NAME" \
-        --region "$region"
-}
-
 ###########################################
 # Main Script
 ###########################################
-
-echo "🚀 Starting Basile Bot Setup"
+echo "🚀 Starting ${APP_NAME} Deployment"
 echo "This script will run all setup parts in sequence."
 echo "------------------------------------------------------------"
 
 # Check for jq
-echo "Checking for jq..."
+# echo "Checking for jq..."
 if ! command -v jq &> /dev/null; then
-    echo "jq is required but not installed. Installing..."
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        brew install jq
-    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        sudo apt-get update && sudo apt-get install -y jq
-    else
-        echo "Please install jq manually: https://stedolan.github.io/jq/download/"
-        exit 1
-    fi
+  echo "jq is required but not installed. Installing..."
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    brew install jq
+  elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    sudo apt-get update && sudo apt-get install -y jq
+  else
+    echo "Please install jq manually: https://stedolan.github.io/jq/download/"
+    exit 1
+  fi
 fi
-echo "✓ jq is available"
+# echo "✓ jq is available"
 
 # Load existing configuration
 echo "Loading configuration..."
 if ! load_configuration; then
-    echo "Starting with fresh configuration"
+  echo "Starting with fresh configuration"
 fi
 echo "------------------------------------------------------------"
 
+###########################################
 # Step 1: Interactive configuration
+###########################################
 echo "Starting interactive configuration..."
+
+# Clear any existing AWS_REGION value to ensure we use the detected default
+unset AWS_REGION
 
 # Get default AWS account ID
 DEFAULT_AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text || echo "")
@@ -182,8 +180,8 @@ DEFAULT_AWS_REGION=$(aws configure get region || echo "us-west-2")
 
 AWS_ACCOUNT_ID=$(prompt_with_default "AWS Account ID" "${AWS_ACCOUNT_ID:-$DEFAULT_AWS_ACCOUNT_ID}")
 AWS_REGION=$(prompt_with_default "AWS Region" "${AWS_REGION:-$DEFAULT_AWS_REGION}")
-APP_NAME=$(prompt_with_default "Application name" "${APP_NAME:-basile-bot}")
-MEMORY_SIZE=$(prompt_with_default "Lambda memory size (MB)" "${MEMORY_SIZE:-1024}")
+APP_NAME=$(prompt_with_default "Application name" "${APP_NAME:-$DEFAULT_APP_NAME}")
+MEMORY_SIZE=$(prompt_with_default "Lambda memory size (MB)" "${MEMORY_SIZE:-512}")
 TIMEOUT=$(prompt_with_default "Lambda timeout (seconds)" "${TIMEOUT:-900}")
 
 # Sanitize application name
@@ -213,11 +211,11 @@ Timeout: $TIMEOUT seconds
 REVIEW
 
 if [ "$NO_INTERACTION" = false ]; then
-    read -p "Do you want to save these settings? [Y/n] " confirm
-    if [[ "$confirm" =~ ^[Nn] ]]; then
-        echo "Setup cancelled."
-        exit 1
-    fi
+  read -p "Do you want to save these settings? [Y/n] " confirm
+  if [[ "$confirm" =~ ^[Nn] ]]; then
+    echo "Setup cancelled."
+    exit 1
+  fi
 fi
 
 # Save configuration
@@ -225,7 +223,10 @@ save_configuration
 echo "Configuration saved to deployment/config.json"
 echo "------------------------------------------------------------"
 
+###########################################
 # Step 2: Validate AWS credentials
+###########################################
+
 echo "Verifying AWS credentials..."
 if aws sts get-caller-identity &>/dev/null; then
     echo "✓ AWS credentials are valid"
@@ -235,7 +236,10 @@ else
     exit 1
 fi
 
+###########################################
 # Step 3: Local build and test
+###########################################
+
 echo -e "\n📋 Building and testing locally..."
 (cd "$PROJECT_ROOT" && docker-compose up --build -d)
 
@@ -257,7 +261,10 @@ done
 (cd "$PROJECT_ROOT" && docker-compose down)
 echo "Local testing complete."
 
+###########################################
 # Step 4: ECR Setup
+###########################################
+
 echo -e "\n📋 Setting up ECR..."
 ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
 REPO_URI="$ECR_REGISTRY/$REPO_NAME"
@@ -290,7 +297,10 @@ fi
 save_configuration
 echo "ECR setup complete. Repository URI: $REPO_URI"
 
+###########################################
 # Step 5: Docker Build and Push
+###########################################
+
 echo -e "\n📋 Building and pushing Docker image..."
 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
 (cd "$PROJECT_ROOT" && docker buildx build --platform=linux/amd64 --provenance=false -t $REPO_NAME .)
@@ -298,7 +308,10 @@ docker tag $REPO_NAME:latest $REPO_URI:latest
 docker push $REPO_URI:latest
 echo "Docker image pushed to $REPO_URI"
 
+###########################################
 # Step 6: IAM Setup
+###########################################
+
 echo -e "\n📋 Setting up IAM roles and policies..."
 # Create the trust policy document
 cat > trust-policy.json << EOF
@@ -374,7 +387,10 @@ echo "Waiting for IAM role and policy attachments to propagate..."
 sleep 10
 echo "IAM setup complete. Role ARN: $ROLE_ARN"
 
+###########################################
 # Step 7: Lambda Deployment
+###########################################
+
 echo -e "\n📋 Setting up Lambda function..."
 
 # Check if the Lambda function exists
@@ -461,7 +477,10 @@ FUNCTION_URL="${FUNCTION_URL%/}"
 save_configuration
 echo "Lambda function setup complete."
 
+###########################################
 # Step 8: Final Status and Testing
+###########################################
+
 echo -e "\nTesting health endpoint..."
 max_attempts=12
 attempt=1
@@ -496,7 +515,10 @@ while [ $attempt -le $max_attempts ]; do
     attempt=$((attempt + 1))
 done
 
+###########################################
 # Step 9: Configure Warm-up Rule
+###########################################
+
 echo -e "\n📋 Setting up warm-up rule..."
 RULE_NAME="${APP_NAME}-warmup"
 
@@ -578,7 +600,10 @@ echo " - Rule Name: $RULE_NAME"
 echo " - Schedule: Every 10 minutes"
 echo " - Target: $FUNCTION_NAME"
 
+###########################################
 # Step 10: Resource Tag Verification
+###########################################
+
 echo -e "\n📋 Verifying resource tagging..."
 echo "Listing all resources tagged with Application=$APP_NAME"
 
