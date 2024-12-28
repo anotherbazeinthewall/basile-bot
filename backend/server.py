@@ -51,6 +51,8 @@ async def health_check():
 
 @app.get("/{filename}")
 async def serve_frontend_files(filename: str):
+    if filename in ["apple-touch-icon.png", "apple-touch-icon-precomposed.png"]:
+        return Response(status_code=404)
     response = FileResponse(str(PROJECT_ROOT / "frontend" / filename))
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
