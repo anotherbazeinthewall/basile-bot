@@ -1,7 +1,11 @@
 import re
 import requests
+import logging
 from bs4 import BeautifulSoup
 from typing import Optional
+
+# Initialize logger
+logger = logging.getLogger("uvicorn")  # Use uvicorn's logger instead of creating a new one
 
 # Constants
 BASE_URL = "https://www.google.com/search?q="
@@ -26,7 +30,8 @@ def _fetch_google_results() -> Optional[str]:
         response = requests.get(search_url, headers=headers)
         response.raise_for_status()
         return response.text
-    except requests.RequestException:
+    except requests.RequestException as e:
+        logger.error(f"Error fetching Google search results: {e}")
         return None
 
 def _extract_profile_data(html: str) -> tuple[str, str, str, str]:
@@ -63,13 +68,13 @@ def pull_linkedin() -> str:
     Fetch and generate a digest of LinkedIn information for a predefined user.
     
     Returns:
-        str: A summary of the user's LinkedIn profile.
+        str: A summary of the user's LinkedIn profile. Returns an empty string if any error occurs.
     """
     try:
         # Fetch search results
         html = _fetch_google_results()
         if not html:
-            return "Error: Failed to fetch search results."
+            return ""
             
         # Extract and format profile data
         title, link, snippet, followers = _extract_profile_data(html)
@@ -84,7 +89,10 @@ def pull_linkedin() -> str:
             "\n"
         )
     except Exception as e:
-        return f"Error: {e}"
+        logger.error(f"Error generating LinkedIn digest: {e}")
+        return ""
 
 if __name__ == "__main__":
+    # Configure logging for standalone execution
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     print(pull_linkedin())

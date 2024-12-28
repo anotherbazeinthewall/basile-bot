@@ -1,10 +1,10 @@
-import logging
-from typing import Optional, Any, List, Dict
-from collections import Counter
 import requests
+from collections import Counter
+from typing import List, Dict, Optional, Any
+import logging
 
-# Set up logging
-logger = logging.getLogger(__name__)
+# Initialize logger
+logger = logging.getLogger("uvicorn")
 
 # Constants
 USERNAME = "anotherbazeinthewall"
@@ -134,8 +134,7 @@ def pull_github() -> str:
 
     Returns:
         str: A summary of the user's GitHub profile, including repositories,
-             languages, and starred repos. Returns an empty string if any error occurs
-             or if the data is incomplete.
+             languages, and starred repos.
     """
     try:
         api = GitHubAPI()
@@ -149,7 +148,7 @@ def pull_github() -> str:
         # If any of the data fetches failed, return an empty string
         if not own_repos or not contributed_repos or not starred_repos:
             return ""
-
+        
         # Process data
         all_repos = digest.merge_repos(own_repos, contributed_repos)
         top_active_repos = digest.get_top_active_repos(all_repos)
