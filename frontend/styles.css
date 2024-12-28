@@ -43,8 +43,7 @@ a {
 
 #terminal {
     inset: 10%;
-    /* opacity: 0;
-    visibility: hidden; */
+    overflow: hidden;
 }
 
 /* ASCII Art */
@@ -84,4 +83,8 @@ pre#ascii-art {
     pre#ascii-art {
         font-size: calc(0.5em + 1vw);
     }
+}
+
+.xterm-viewport {
+    overflow-y: hidden !important;
 }
