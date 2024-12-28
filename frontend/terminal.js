@@ -65,7 +65,7 @@ class PyTerminal {
     }
 
     async _initializePyodide() {
-        this.term.writeln('\u001b[90mInitializing...\u001b[0m');
+        this.term.writeln('\u001b[90mPreparing Environment...\u001b[0m');
 
         try {
             this.pyodide = await loadPyodide({
@@ -106,7 +106,7 @@ class PyTerminal {
             pyodide_http.patch_all()
           `);
 
-            // this.term.writeln('\u001b[90mPython environment ready\u001b[0m');
+            this.term.writeln('\u001b[90mPython environment ready ✓\u001b[0m');
             // Load and run main Python code
             const response = await fetch('/client.py');
             const pythonCode = await response.text();

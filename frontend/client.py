@@ -1,6 +1,6 @@
 import json
-from pyodide.http import pyfetch
-from js import TextDecoder, window
+from pyodide.http import pyfetch  # type: ignore
+from js import TextDecoder, window  # type: ignore
 
 API_ENDPOINT = "/api/chat" 
 
