@@ -1,9 +1,13 @@
 import io
 import re
+import logging
 from typing import List, Optional
 import requests
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
+
+# Initialize logger
+logger = logging.getLogger("uvicorn")
 
 # Constants
 BASE_URL = "https://resume.alexbasile.com"
@@ -35,16 +39,18 @@ class ResumeFetcher:
             meta_refresh = soup.find('meta', attrs={'http-equiv': 'refresh'})
             
             if not meta_refresh or 'content' not in meta_refresh.attrs:
+                logger.error("No meta refresh tag found in base page")
                 return None
                 
             pdf_path = re.search(r'url=(.+)', meta_refresh['content'])
             if not pdf_path:
+                logger.error("No PDF URL found in meta refresh content")
                 return None
                 
             return requests.compat.urljoin(self.base_url, pdf_path.group(1).strip())
             
         except requests.RequestException as e:
-            print(f"Error fetching base URL: {e}")
+            logger.error(f"Error fetching base URL {self.base_url}: {e}")
             return None
     
     def get_pdf_content(self) -> Optional[bytes]:
@@ -63,7 +69,7 @@ class ResumeFetcher:
             response.raise_for_status()
             return response.content
         except requests.RequestException as e:
-            print(f"Error fetching PDF: {e}")
+            logger.error(f"Error fetching PDF from {pdf_url}: {e}")
             return None
 
 class ResumeParser:
@@ -101,39 +107,43 @@ class ResumeParser:
         Returns:
             str: Formatted text from the PDF
         """
-        pdf_file = io.BytesIO(pdf_content)
-        reader = PdfReader(pdf_file)
-        
-        formatted_sections = []
-        current_section = []
-        
-        for page in reader.pages:
-            text = page.extract_text()
-            lines = text.split('\n')
+        try:
+            pdf_file = io.BytesIO(pdf_content)
+            reader = PdfReader(pdf_file)
             
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-                    
-                if self.is_section_header(line):
-                    if current_section:
-                        formatted_sections.append('\n'.join(current_section))
-                        current_section = []
-                    current_section.append(f"\n## {line}")
-                    
-                elif self.is_subsection(line):
-                    current_section.append(f"\n**{line}**")
-                    
-                else:
-                    current_section.append(line)
-        
-        if current_section:
-            formatted_sections.append('\n'.join(current_section))
-        
-        # Join and clean up the text
-        final_text = '\n'.join(formatted_sections)
-        return re.sub(r'\n\s*\n', '\n\n', final_text)
+            formatted_sections = []
+            current_section = []
+            
+            for page in reader.pages:
+                text = page.extract_text()
+                lines = text.split('\n')
+                
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                        
+                    if self.is_section_header(line):
+                        if current_section:
+                            formatted_sections.append('\n'.join(current_section))
+                            current_section = []
+                        current_section.append(f"\n## {line}")
+                        
+                    elif self.is_subsection(line):
+                        current_section.append(f"\n**{line}**")
+                        
+                    else:
+                        current_section.append(line)
+            
+            if current_section:
+                formatted_sections.append('\n'.join(current_section))
+            
+            # Join and clean up the text
+            final_text = '\n'.join(formatted_sections)
+            return re.sub(r'\n\s*\n', '\n\n', final_text)
+        except Exception as e:
+            logger.error(f"Error parsing PDF content: {e}")
+            return ""
 
 def pull_resume() -> str:
     """
@@ -141,18 +151,25 @@ def pull_resume() -> str:
     
     Returns:
         str: Extracted and formatted text from the PDF.
+        Returns an empty string if any error occurs.
     """
-    # Fetch PDF content
-    fetcher = ResumeFetcher()
-    pdf_content = fetcher.get_pdf_content()
-    if not pdf_content:
-        return "Error: Could not fetch resume PDF"
-    
-    # Parse and format content
-    parser = ResumeParser()
-    formatted_text = parser.parse_pdf(pdf_content)
-    
-    return f"YOUR RESUME:\n\n{formatted_text}\n\n"
+    try:
+        # Fetch PDF content
+        fetcher = ResumeFetcher()
+        pdf_content = fetcher.get_pdf_content()
+        if not pdf_content:
+            return ""
+        
+        # Parse and format content
+        parser = ResumeParser()
+        formatted_text = parser.parse_pdf(pdf_content)
+        if not formatted_text:
+            return ""
+        
+        return f"YOUR RESUME:\n\n{formatted_text}\n\n"
+    except Exception as e:
+        logger.error(f"Error generating resume digest: {e}")
+        return ""
 
 if __name__ == "__main__":
     print(pull_resume())
