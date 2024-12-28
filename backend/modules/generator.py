@@ -1,6 +1,11 @@
-import boto3, json
+import boto3
+import json
+import logging
 from botocore.config import Config
 from botocore.exceptions import ProfileNotFound
+
+# Initialize Uvicorn logger
+logger = logging.getLogger("uvicorn")
 
 def _get_clients():
     """Initialize Bedrock clients with appropriate configuration."""
@@ -56,7 +61,7 @@ def generate_stream(messages, max_gen_len=1024, temperature=0.9):
         yield 'data: [DONE]\n\n'
         
     except Exception as e:
-        print(f"Generation error: {str(e)}")
+        logger.error(f"Generation error: {str(e)}")
         yield 'data: [ERROR]\n\n'
 
 if __name__ == "__main__":
@@ -64,4 +69,5 @@ if __name__ == "__main__":
         for o in generate_stream([
             {"role": "user", "content": "Tell me a joke about computers."},
             {"role": "system", "content": "Be helpful and humorous."}
-        ]): print(o, end='', flush=True)
+        ]):
+            print(o, end='', flush=True)
