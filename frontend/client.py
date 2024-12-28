@@ -1,8 +1,4 @@
-import re
-import io
 import json
-import base64
-import asyncio
 from pyodide.http import pyfetch
 from js import TextDecoder, window
 

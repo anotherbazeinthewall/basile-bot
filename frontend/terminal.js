@@ -96,7 +96,6 @@ class PyTerminal {
             
             required_packages = [
               'pyodide-http',
-              'PyPDF2'
             ]
             
             await asyncio.gather(
