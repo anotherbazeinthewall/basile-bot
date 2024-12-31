@@ -135,7 +135,7 @@ class GitHubDigest:
         sections = []
         
         # Languages section
-        sections.append("\nYOUR PROGRAMMING LANGUAGES (ON GITHUB):\n")
+        sections.append("YOUR PROGRAMMING LANGUAGES (ON GITHUB):\n")
         for language, count in language_stats.most_common():
             sections.append(f"- {language}: {count} repos")
 
