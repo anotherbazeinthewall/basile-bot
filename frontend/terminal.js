@@ -45,7 +45,6 @@ class PyTerminal {
         }
     }
 
-
     async initialize(containerId, pythonScript = '/client.py') {
         // Initialize terminal
         this.term = new Terminal(this.terminalOptions);
@@ -133,7 +132,6 @@ class PyTerminal {
     async _initializePyodide(pythonScript) {
         try {
             const pageTitle = document.title || 'Terminal';
-
             this.pyodide = await this.dotLoad(
                 `Loading ${pageTitle}`,
                 loadPyodide({
@@ -144,7 +142,6 @@ class PyTerminal {
 
             // Set up basic globals
             this.pyodide.globals.set('term', this.term);
-            this.pyodide.globals.set('TextDecoder', window.TextDecoder);
             this.pyodide.globals.set('get_input', this.getInput.bind(this));
 
             // Load required packages
@@ -153,25 +150,30 @@ class PyTerminal {
                 import sys
                 import asyncio
                 import builtins
-                from js import term
-
+                import codecs
+                import urllib.request  # Python's built-in HTTP module
+                from js import term, window
+                
                 # Configure custom input/output
                 def setupIO():
                     async def custom_input(prompt=''):
                         return await get_input(prompt)
                     builtins.input = custom_input
-
-                    def custom_print(text, color=None):
-                        colors = {
-                            'green': '\u001b[92m',
-                            'gray': '\u001b[90m'
-                        }
-                        if color:
-                            window.term.write(f"{colors[color]}{text}\u001b[0m")
-                        else:
-                            window.term.write(text)
+                    
+                    def custom_print(text):
+                        window.term.write(text)
                     builtins.print = custom_print
-
+    
+                    # Create a pythonic decoder interface
+                    class StreamDecoder:
+                        @staticmethod
+                        def new(encoding):
+                            decoder = window.TextDecoder.new(encoding)
+                            return decoder
+                    
+                    # Add it to codecs module
+                    codecs.StreamDecoder = StreamDecoder
+                
                 # Install and configure required packages
                 async def setupPackages():
                     import micropip
@@ -179,7 +181,11 @@ class PyTerminal {
                     await asyncio.gather(*[micropip.install(pkg) for pkg in required_packages])
                     import pyodide_http
                     pyodide_http.patch_all()
-
+                    
+                    # Add pyfetch to urllib.request
+                    from pyodide.http import pyfetch
+                    urllib.request.fetch = pyfetch
+                
                 # Run setup functions
                 setupIO()
                 await setupPackages()
@@ -190,7 +196,6 @@ class PyTerminal {
             const pythonCode = await response.text();
             await this.pyodide.runPythonAsync(pythonCode);
             await this.pyodide.runPythonAsync('asyncio.ensure_future(main())');
-
         } catch (error) {
             this.termWrite('Error initializing Python environment:\n', 'red');
             this.termWrite(error.toString() + '\n', 'red');
