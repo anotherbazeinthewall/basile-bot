@@ -28,6 +28,8 @@ prompt_with_default() {
     read -p "$1 [$2]: " input && echo "${input:-$2}"
 }
 
+UTILITIES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+
 save_configuration() {
     jq -n \
     --arg account_id "$AWS_ACCOUNT_ID" \
@@ -63,9 +65,9 @@ save_configuration() {
             repo_uri: $repo_uri,
             function_url: $function_url
         }
-    }' > config.json
+    }' > "$UTILITIES_DIR/config.json"
     
-    echo "✓ Configuration saved to config.json"
+    echo "✓ Configuration saved to utilities/config.json"
 }
 
 wait_for_lambda() {
@@ -93,10 +95,10 @@ wait_for_lambda() {
 # Step 1: Interactive configuration
 ###########################################
 load_configuration() {
-    if [ -f config.json ]; then
+    if [ -f "$UTILITIES_DIR/config.json" ]; then
         echo -n "Loading existing configuration... "
         export CONFIG_EXISTS=true
-        eval "$(jq -r '.core * .lambda * .derived | to_entries | .[] | "export \(.key | ascii_upcase)=\(.value | @sh)"' config.json)"
+        eval "$(jq -r '.core * .lambda * .derived | to_entries | .[] | "export \(.key | ascii_upcase)=\(.value | @sh)"' "$UTILITIES_DIR/config.json")"
         echo "✓"
     else
         echo -e "\nCreating new configuration"
@@ -118,7 +120,7 @@ configure_interactively() {
     
     for i in "${!defaults[@]}"; do
         IFS=";" read -r prompt default <<< "${defaults[$i]}"
-        declare -g "${variables[$i]}=$(prompt_with_default "$prompt" "${!variables[$i]:-$default}")"
+        eval "${variables[$i]}=$(prompt_with_default "$prompt" "${!variables[$i]:-$default}")"
     done
     
     APP_NAME=$(echo "$APP_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')
@@ -430,9 +432,9 @@ RULE_ARN=$(aws events put-rule \
     || handle_error "CloudWatch Events rule setup" $?
 
 # Update Lambda permissions
-    aws lambda remove-permission \
-        --function-name "$FUNCTION_NAME" \
-        --statement-id "WarmupPermission" \
+aws lambda remove-permission \
+    --function-name "$FUNCTION_NAME" \
+    --statement-id "WarmupPermission" \
     --region "$AWS_REGION" 2>/dev/null || true
 aws lambda add-permission \
     --function-name "$FUNCTION_NAME" \
@@ -443,8 +445,8 @@ aws lambda add-permission \
     || handle_error "Lambda permission update" $?
 
 # Update CloudWatch Events target
-    aws events remove-targets \
-        --rule "$RULE_NAME" \
+aws events remove-targets \
+    --rule "$RULE_NAME" \
     --ids "1" 2>/dev/null || true
 aws events put-targets \
     --rule "$RULE_NAME" \
