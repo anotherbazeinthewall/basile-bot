@@ -33,8 +33,9 @@ class PyTerminal {
     termWrite(text, color = null) {
         const colors = {
             'green': '\u001b[92m',
-            'gray': '\u001b[90m',
-            'red': '\u001b[31m'
+            'gray': '\u001b[2;90m',      // Dimmed gray
+            'red': '\u001b[31m',
+            'white': '\u001b[37m'        // Regular white (no dimming)
         };
 
         if (color && colors[color]) {
@@ -101,6 +102,10 @@ class PyTerminal {
             this.termWrite('.'.repeat(dots = (dots + 1) % 4), 'white');
         }, ms);
 
+        // Trigger first animation frame immediately
+        this.term.write('\u001b8');
+        this.termWrite('', 'white');
+
         const waitForThreeDots = () => new Promise(r => {
             const check = setInterval(() => {
                 if (dots === 3) {
@@ -145,9 +150,9 @@ class PyTerminal {
             // Load required packages
             await this.pyodide.loadPackage('micropip');
             await this.pyodide.runPythonAsync(`
-                import builtins
                 import sys
                 import asyncio
+                import builtins
                 from js import term
 
                 # Configure custom input/output

@@ -13,23 +13,23 @@ class Conversation:
             you_are = "YOU ARE:\n\nMellow, modest, curious, clever, organized and analytical.\n\n"
             comm_style = "YOUR COMMUNICATION STYLE:\n\nYou communicate with thoughtfulness and depth, focusing on meaningful connections and expressing empathy. Your messages often convey understanding and encouragement, fostering a positive atmosphere. You prioritize clarity and purpose, ensuring your words resonate. You value authenticity, blending emotional insight with a professional tone to create impactful and constructive interactions.\n\n"
             try:
-                print('Reviewing Resume at \u001b[1m\u001b[4mhttps://resume.alexbasile.com\u001b[0m\n', 'gray')
+                print('Fetching Resume: \u001b[1m\u001b[4mhttps://resume.alexbasile.com\u001b[0m\n', 'gray')
                 resume = await (await pyfetch("/api/resume")).string()
             except Exception as e:
                 window.console.log(f"Error fetching Resume: {e}")
             try:
-                print('Reviewing LinkedIn profile at \u001b[1m\u001b[4mhttps://www.linkedin.com/in/awbasile\u001b[0m\n', 'gray')
+                print('Fetching LinkedIn: \u001b[1m\u001b[4mhttps://www.linkedin.com/in/awbasile\u001b[0m\n', 'gray')
                 linkedin = await (await pyfetch("/api/linkedin")).string()
             except Exception as e:
                 window.console.log(f"Error fetching GitHub digest: {e}")
             try:
-                print('Reviewing GitHub profile at \u001b[1m\u001b[4mhttps://github.com/anotherbazeinthewall\u001b[0m\n', 'gray')
+                print('Fetching GitHub: \u001b[1m\u001b[4mhttps://github.com/anotherbazeinthewall\u001b[0m\n', 'gray')
                 github = await (await pyfetch("/api/github")).string()
             except Exception as e:
                 window.console.log(f"Error fetching GitHub digest: {e}")
 
             self.base_system_prompt = (
-                f"""You are Alex Basile. Your task is to engage the user in a conversation about your professional background and technical interests.\n\n{you_are}{comm_style}{linkedin}{resume}{github}YOU WILL:\n\n- Base all of your responses on the information provided.\n- Advise the user to check your Resume, GitHub or LinkedIn.\n- Admit when you don't have enough information to answer a question and suggest the user email you at basileaw@gmail.com.\n- Use your famous sense of humor to deflect any inappropriate messages from the user.\n\nYOU WON'T:\n\n- Answer questions for which you do not have information available here.\n- Talk about your "passions" or "innovations" """
+                f"""You are Alex Basile. Your task is to engage the user in a conversation about your professional background and technical interests.\n\n{you_are}{comm_style}{linkedin}{resume}{github}YOU WILL:\n\n- Base all of your responses on the information provided.\n- Advise the user to check your Resume, GitHub or LinkedIn.\n- Admit when you don't have enough information to answer a question and suggest the user email you at basileaw@gmail.com.\n- Use your famous sense of humor to deflect any inappropriate messages from the user.\n\nYOU WON'T:\n\n- Answer questions for which you do not have information available here.\n- Talk about your "passions" or "innovations"\n- Use emojis"""
             )
 
             window.console.log(self.base_system_prompt)
