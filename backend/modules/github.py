@@ -1,7 +1,9 @@
+import time
+import logging
+import argparse
 import requests
 from collections import Counter
 from typing import List, Dict, Optional, Any
-import logging
 
 # Initialize logger
 logger = logging.getLogger("uvicorn")
@@ -10,30 +12,57 @@ logger = logging.getLogger("uvicorn")
 USERNAME = "anotherbazeinthewall"
 BASE_URL = "https://api.github.com"
 TOP_REPOS_LIMIT = 5
+CACHE_DURATION = 3600  # 1 hour in seconds
 
 class GitHubAPI:
     """Handles GitHub API interactions and data processing."""
 
-    def __init__(self) -> None:
+    def __init__(self, bypass_cache: bool = False) -> None:
         self.session = requests.Session()
         self.session.headers.update({
             'Accept': 'application/vnd.github.v3+json'
         })
+        self._cache = {}
+        self._cache_timestamps = {}
+        self.bypass_cache = bypass_cache
     
-    def _fetch_url(self, url: str) -> Optional[Any]:
+    def _is_cache_valid(self, cache_key: str) -> bool:
+        """Check if cached data is still valid."""
+        if self.bypass_cache:
+            return False
+            
+        if cache_key not in self._cache_timestamps:
+            return False
+            
+        elapsed_time = time.time() - self._cache_timestamps[cache_key]
+        return elapsed_time < CACHE_DURATION
+    
+    def _fetch_url(self, url: str, cache_key: str = None) -> Optional[Any]:
         """
-        Fetch data from a GitHub API endpoint.
-
+        Fetch data from a GitHub API endpoint with time-based caching.
+        
         Args:
             url (str): The API endpoint URL
-
+            cache_key (str): Optional key for caching the response
+        
         Returns:
             Optional[Any]: JSON response data or None if request fails
         """
+        if cache_key and self._is_cache_valid(cache_key):
+            logger.info(f"Using cached data for {cache_key}")
+            return self._cache[cache_key]
+
         try:
+            logger.info(f"Fetching fresh data for {cache_key}")
             response = self.session.get(url)
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            
+            if cache_key:
+                self._cache[cache_key] = data
+                self._cache_timestamps[cache_key] = time.time()
+            
+            return data
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching URL {url}: {e}")
             return None
@@ -104,40 +133,43 @@ class GitHubDigest:
     ) -> str:
         """Format the GitHub data into a readable string."""
         sections = []
-
-        # Top repositories section
-        sections.append("Top Repositories (by Recent Activity):")
-        for repo in top_repos:
-            sections.append(
-                f"- {repo['name']} "
-                f"(Last updated: {repo.get('updated_at', 'N/A')})"
-            )
         
         # Languages section
-        sections.append("\nLanguages Used:")
+        sections.append("\nYOUR PROGRAMMING LANGUAGES (ON GITHUB):\n")
         for language, count in language_stats.most_common():
             sections.append(f"- {language}: {count} repos")
-        
-        # Starred repositories section
-        sections.append("\nStarred Repositories:")
-        for repo in starred_repos[:TOP_REPOS_LIMIT]:
+
+        # Top repositories section
+        sections.append("\nYOUR PERSONAL GITHUB REPOS:\n")
+        for repo in top_repos:
+            description = repo.get('description', 'No description available')
             sections.append(
-                f"- {repo['full_name']} "
-                f"({repo['html_url']})"
+                f"""- {repo['full_name']}: "{description}" ({repo['html_url']})"""
             )
         
-        return "YOUR GITHUB PROFILE:\n\n" + "\n".join(sections) + "\n\n"
+        # Starred repositories section
+        sections.append("\nYOUR WATCHED GITHUB REPOS:\n")
+        for repo in starred_repos[:TOP_REPOS_LIMIT]:
+            description = repo.get('description', '[No description available]')
+            sections.append(
+                f"""- {repo['full_name']}: "{description}" ({repo['html_url']})"""
+            )
+        
+        return "\n".join(sections) + "\n\n"
 
-def pull_github() -> str:
+def pull_github(bypass_cache: bool = False) -> str:
     """
     Fetch and generate a digest of GitHub information for a predefined user.
-
+    
+    Args:
+        bypass_cache (bool): If True, bypass the cache and fetch fresh data
+    
     Returns:
         str: A summary of the user's GitHub profile, including repositories,
              languages, and starred repos.
     """
     try:
-        api = GitHubAPI()
+        api = GitHubAPI(bypass_cache=bypass_cache)
         digest = GitHubDigest()
         
         # Fetch data
@@ -165,4 +197,12 @@ def pull_github() -> str:
         return ""
 
 if __name__ == "__main__":
-    print(pull_github())
+    parser = argparse.ArgumentParser(description='Fetch GitHub profile information')
+    parser.add_argument('--fresh', action='store_true', 
+                       help='Bypass cache and fetch fresh data')
+    args = parser.parse_args()
+    
+    if args.fresh:
+        logger.info("Bypassing cache and fetching fresh data")
+    
+    print(pull_github(bypass_cache=args.fresh))
