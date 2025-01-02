@@ -86,6 +86,7 @@ class PyTerminal {
         let animationInterval;
         let isResolved = false;
         let resolvePromise;
+        let shouldComplete = false;
 
         console.log(`[${(performance.now() - startTime).toFixed(2)}ms] Creating worker...`);
         const worker = new Worker('pyodideWorker.js');
@@ -109,18 +110,25 @@ class PyTerminal {
             const currentTime = performance.now() - startTime;
             console.log(`[${currentTime.toFixed(2)}ms] Animation frame ${dots}`);
 
-            if (!isResolved) {
-                this.term.write('\u001b8');
-                this.term.write(' '.repeat(3));
-                this.term.write('\u001b8');
-                this.term.write('.'.repeat(dots));
-                dots = (dots + 1) % 4;
-            } else {
+            this.term.write('\u001b8');
+            this.term.write(' '.repeat(3));
+            this.term.write('\u001b8');
+            this.term.write('.'.repeat(dots));
+
+            if (isResolved && dots === 3 || shouldComplete) {
                 console.log(`[${currentTime.toFixed(2)}ms] Animation complete`);
                 clearInterval(animationInterval);
                 this.term.write('\u001b8');
                 this.term.write('...\n\n');
                 resolvePromise(worker);
+                return;
+            }
+
+            dots = (dots + 1) % 4;
+
+            // If resolved but not at 3 dots yet, continue until we reach 3
+            if (isResolved && dots !== 3) {
+                shouldComplete = true;
             }
         };
 
