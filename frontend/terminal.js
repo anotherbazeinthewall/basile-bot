@@ -76,7 +76,7 @@ class PyTerminal {
         });
     }
 
-    async dotLoad(msg, pageTitle, ms = 750) {
+    async dotLoad(msg, ms = 750) {
         console.log(`[${performance.now().toFixed(2)}ms] Starting dotLoad...`);
         const startTime = performance.now();
 
@@ -146,7 +146,7 @@ class PyTerminal {
             const pageTitle = document.title || 'Terminal';
 
             if (!this.pyodide) {
-                this.pyodide = await this.dotLoad(`Loading ${pageTitle}`, pageTitle);
+                this.pyodide = await this.dotLoad(`Loading ${pageTitle}`);
                 this.pyodide.onmessage = async (event) => {
                     await this.messageHandler.handle(event.data);
                 };
