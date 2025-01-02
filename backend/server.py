@@ -53,11 +53,17 @@ async def health_check():
 async def serve_frontend_files(filename: str):
     if filename in ["apple-touch-icon.png", "apple-touch-icon-precomposed.png"]:
         return Response(status_code=404)
-    response = FileResponse(str(PROJECT_ROOT / "frontend" / filename))
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
+    
+    cache_headers = {
+        "Cache-Control": f"no-cache, {'must-revalidate' if filename == 'favicon.ico' else 'no-store, must-revalidate'}",
+        "Pragma": "no-cache",
+        "Expires": "0"
+    }
+    
+    return FileResponse(
+        str(PROJECT_ROOT / "frontend" / filename),
+        headers=cache_headers
+    )
 
 @app.get("/api/resume")
 async def send_resume():
@@ -116,5 +122,5 @@ if __name__ == "__main__":
         port=8000,
         reload=True,
         reload_excludes=["*.pyc", "*.log"],
-        reload_includes=["*.py", "*.html", "*.css", "*.js"],
+        reload_includes=["*.py", "*.html", "*.css", "*.js", "*.ico"],
     )
