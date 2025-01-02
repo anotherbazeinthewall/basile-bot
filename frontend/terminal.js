@@ -1,22 +1,11 @@
 class PyTerminal {
     constructor(options = {}) {
         this.terminalOptions = {
-            rows: 24,
-            cols: 80,
-            cursorBlink: true,
-            scrollback: 1000,
-            disableStdin: false,
-            rendererType: "canvas",
-            theme: {
-                background: '#000000',
-                foreground: '#d4d7cd'  // Using the dimmer white (212,215,205)
-            },
-            allowTransparency: true,
-            convertEol: true,
-            wordWrap: true,
-            windowsMode: false,
-            wraparoundMode: true,
-            ...options
+            rows: 24, cols: 80, cursorBlink: true, scrollback: 1000,
+            disableStdin: false, rendererType: "canvas",
+            theme: { background: '#000000', foreground: '#d4d7cd' },
+            allowTransparency: true, convertEol: true, wordWrap: true,
+            windowsMode: false, wraparoundMode: true, ...options
         };
 
         this.term = null;
@@ -28,156 +17,122 @@ class PyTerminal {
         this.inputBuffer = '';
         this.inputResolve = null;
         this.pyodide = null;
+        this.messageHandler = new MessageHandler();
+        this._initializeMessageHandlers();
+    }
+
+    _initializeMessageHandlers() {
+        const handlers = {
+            [MessageTypes.STDOUT]: ({ text }) => text && this.term.write(text),
+            [MessageTypes.STDERR]: ({ text }) => text && this.term.write(text),
+            [MessageTypes.INPUT]: async ({ prompt, id }) => {
+                try {
+                    const response = await this.getInput(prompt);
+                    this.pyodide.postMessage({ type: MessageTypes.INPUT_RESPONSE, value: response, id });
+                } catch (error) { console.error('Input error:', error); }
+            },
+            [MessageTypes.LOADED]: () => { },
+            [MessageTypes.PACKAGE_LOADED]: () => { },
+            [MessageTypes.PYTHON_READY]: () => { },
+            [MessageTypes.ERROR]: ({ error, stack }) => {
+                console.error('Pyodide error:', error, stack);
+                this.term.write(`Error: ${error}\n`);
+            }
+        };
+
+        Object.entries(handlers).forEach(([type, handler]) =>
+            this.messageHandler.register(type, handler));
     }
 
     async initialize(containerId, pythonScript = '/client.py') {
-        // Initialize terminal
         this.term = new Terminal(this.terminalOptions);
         window.term = this.term;
         this.term.open(document.getElementById(containerId));
-
-        // Hide cursor initially and focus the terminal
         this.term.write('\x1b[?25l');
         this.term.focus();
-
         this._initializeTerminal();
-
-        // Initialize Pyodide environment
         await this._initializePyodide(pythonScript);
     }
 
     _initializeTerminal() {
-        // Load addons
-        for (const [name, addon] of Object.entries(this.addons)) {
+        Object.entries(this.addons).forEach(([name, addon]) => {
             try {
                 this.term.loadAddon(addon);
             } catch (e) {
                 console.warn(`${name} addon failed to load:`, e);
             }
-        }
+        });
 
         this.addons.fit.fit();
         window.addEventListener('resize', () => this.addons.fit.fit());
 
-        // Setup input handling
         this.term.onKey(({ key, domEvent }) => {
             const keyHandlers = {
-                13: () => this._handleEnterKey(),    // Enter
-                8: () => this._handleBackspace(),     // Backspace
+                13: () => this._handleEnterKey(),
+                8: () => this._handleBackspace(),
                 default: () => this._handleRegularInput(key)
             };
-
             (keyHandlers[domEvent.keyCode] || keyHandlers.default)();
         });
     }
 
-    async dotLoad(msg, pageTitle, ms = 500) {
+    async dotLoad(msg, pageTitle, ms = 750) {
+        console.log(`[${performance.now().toFixed(2)}ms] Starting dotLoad...`);
         const startTime = performance.now();
-        console.log('Initial message at 0ms');
-        this.term.write(msg);
-        this.term.write('\u001b7'); // Save cursor position
 
+        this.term.write(msg);
+        this.term.write('\u001b7');
         let dots = 0;
         let animationInterval;
         let isResolved = false;
         let resolvePromise;
 
-        // Initialize the Web Worker
+        console.log(`[${(performance.now() - startTime).toFixed(2)}ms] Creating worker...`);
         const worker = new Worker('pyodideWorker.js');
-
-        // Create a promise to handle worker messages
         const pyodidePromise = new Promise((resolve, reject) => {
             resolvePromise = resolve;
             worker.onmessage = async (event) => {
-                const { type, text, error, prompt } = event.data;
-
-                switch (type) {
-                    case 'stdout':
-                        this.term.write(text);
-                        break;
-                    case 'stderr':
-                        this.term.write(text);
-                        break;
-                    case 'loaded':
-                        const resolveTime = performance.now() - startTime;
-                        console.log(`Promise resolved at ${resolveTime.toFixed(2)}ms`);
-                        isResolved = true;
-                        break;
-                    case 'input':
-                        const response = await this.getInput(prompt);
-                        worker.postMessage({ type: 'inputResponse', value: response });
-                        break;
-                    case 'error':
-                        reject(new Error(error));
-                        break;
+                await this.messageHandler.handle(event.data);
+                if (event.data.type === MessageTypes.LOADED) {
+                    const resolveTime = performance.now() - startTime;
+                    console.log(`[${resolveTime.toFixed(2)}ms] Pyodide loaded`);
+                    isResolved = true;
                 }
             };
-
-            worker.onerror = (error) => {
-                reject(error);
-            };
+            worker.onerror = (error) => reject(error);
         });
 
-        // Start the worker
-        worker.postMessage({ type: 'load' });
+        console.log(`[${(performance.now() - startTime).toFixed(2)}ms] Sending LOAD message to worker...`);
+        worker.postMessage({ type: MessageTypes.LOAD });
 
-        // Animation function
         const animate = () => {
             const currentTime = performance.now() - startTime;
-            console.log(`Dot animation ${dots} at ${currentTime.toFixed(2)}ms`);
+            console.log(`[${currentTime.toFixed(2)}ms] Animation frame ${dots}`);
 
-            this.term.write('\u001b8'); // Restore cursor position
-            this.term.write('   '); // Clear previous dots
-            this.term.write('\u001b8'); // Restore cursor position again
-            this.term.write('.'.repeat(dots));
-
-            dots = (dots + 1) % 4;
-
-            if (isResolved && dots === 0) {
+            if (!isResolved) {
+                this.term.write('\u001b8');
+                this.term.write(' '.repeat(3));
+                this.term.write('\u001b8');
+                this.term.write('.'.repeat(dots));
+                dots = (dots + 1) % 4;
+            } else {
+                console.log(`[${currentTime.toFixed(2)}ms] Animation complete`);
                 clearInterval(animationInterval);
-                console.log(`Animation completed at ${currentTime.toFixed(2)}ms`);
                 this.term.write('\u001b8');
                 this.term.write('...\n\n');
-
-                resolvePromise({
-                    worker,
-                    loadPackage: async (...args) => {
-                        return new Promise((resolve, reject) => {
-                            worker.onmessage = (event) => {
-                                if (event.data.type === 'loadPackage') {
-                                    resolve(event.data.result);
-                                } else if (event.data.type === 'error') {
-                                    reject(new Error(event.data.error));
-                                }
-                            };
-                            worker.postMessage({ type: 'loadPackage', args });
-                        });
-                    },
-                    runPythonAsync: async (...args) => {
-                        return new Promise((resolve, reject) => {
-                            worker.onmessage = (event) => {
-                                if (event.data.type === 'runPython') {
-                                    resolve(event.data.result);
-                                } else if (event.data.type === 'error') {
-                                    reject(new Error(event.data.error));
-                                }
-                            };
-                            worker.postMessage({ type: 'runPython', args });
-                        });
-                    }
-                });
+                resolvePromise(worker);
             }
         };
 
-        // Start the animation immediately
+        console.log(`[${(performance.now() - startTime).toFixed(2)}ms] Starting animation...`);
         animate();
         animationInterval = setInterval(animate, ms);
 
         try {
-            return await pyodidePromise;
+            const result = await pyodidePromise;
+            console.log(`[${(performance.now() - startTime).toFixed(2)}ms] dotLoad complete`);
+            return result;
         } catch (error) {
-            const currentTime = performance.now() - startTime;
-            console.log(`Error occurred at ${currentTime.toFixed(2)}ms`);
             clearInterval(animationInterval);
             this.term.write('\u001b8');
             this.term.write('...\n\n');
@@ -190,123 +145,36 @@ class PyTerminal {
         try {
             const pageTitle = document.title || 'Terminal';
 
-            // Initialize the Web Worker
             if (!this.pyodide) {
-                this.pyodide = new Worker('pyodideWorker.js');
-
-                // Set up message handling
+                this.pyodide = await this.dotLoad(`Loading ${pageTitle}`, pageTitle);
                 this.pyodide.onmessage = async (event) => {
-                    const { type, text, prompt, id } = event.data;
-
-                    switch (type) {
-                        case 'stdout':
-                            if (text) this.term.write(text);
-                            break;
-                        case 'stderr':
-                            if (text) this.term.write(text);
-                            break;
-                        case 'input':
-                            try {
-                                const response = await this.getInput(prompt);
-                                this.pyodide.postMessage({
-                                    type: 'inputResponse',
-                                    value: response,
-                                    id
-                                });
-                            } catch (error) {
-                                console.error('Input error:', error);
-                            }
-                            break;
-                    }
+                    await this.messageHandler.handle(event.data);
                 };
             }
 
-            // Initialize Pyodide with loading animation
-            await this.dotLoad(
-                `Loading ${pageTitle}`,
-                pageTitle,
-                500
-            );
-
-            // Wait for initial load to complete
-            await new Promise((resolve, reject) => {
+            const createPromise = (expectedType) => new Promise((resolve, reject) => {
                 const handler = (event) => {
-                    if (event.data.type === 'loaded') {
+                    if (event.data.type === expectedType) {
                         this.pyodide.removeEventListener('message', handler);
                         resolve();
-                    } else if (event.data.type === 'error') {
+                    } else if (event.data.type === MessageTypes.ERROR) {
                         this.pyodide.removeEventListener('message', handler);
                         reject(new Error(event.data.error));
                     }
                 };
-
                 this.pyodide.addEventListener('message', handler);
-                this.pyodide.postMessage({ type: 'load' });
             });
 
-            // Load required packages
-            await new Promise((resolve, reject) => {
-                const handler = (event) => {
-                    if (event.data.type === 'loadPackage') {
-                        this.pyodide.removeEventListener('message', handler);
-                        resolve();
-                    } else if (event.data.type === 'error') {
-                        this.pyodide.removeEventListener('message', handler);
-                        reject(new Error(event.data.error));
-                    }
-                };
+            // Load and run Python script
+            const pythonCode = await (await fetch(pythonScript)).text();
+            this.pyodide.postMessage({ type: MessageTypes.RUN_PYTHON, args: [pythonCode] });
+            await createPromise(MessageTypes.PYTHON_READY);
 
-                this.pyodide.addEventListener('message', handler);
-                this.pyodide.postMessage({
-                    type: 'loadPackage',
-                    args: ['micropip']
-                });
-            });
-
-            // Load and run the Python script
-            const response = await fetch(pythonScript);
-            const pythonCode = await response.text();
-
-            await new Promise((resolve, reject) => {
-                const handler = (event) => {
-                    if (event.data.type === 'runPython') {
-                        this.pyodide.removeEventListener('message', handler);
-                        resolve();
-                    } else if (event.data.type === 'error') {
-                        this.pyodide.removeEventListener('message', handler);
-                        reject(new Error(event.data.error));
-                    }
-                };
-
-                this.pyodide.addEventListener('message', handler);
-                this.pyodide.postMessage({
-                    type: 'runPython',
-                    args: [pythonCode]
-                });
-            });
-
-            // Start the main function
-            await new Promise((resolve, reject) => {
-                const handler = (event) => {
-                    if (event.data.type === 'runPython') {
-                        this.pyodide.removeEventListener('message', handler);
-                        resolve();
-                    } else if (event.data.type === 'error') {
-                        this.pyodide.removeEventListener('message', handler);
-                        reject(new Error(event.data.error));
-                    }
-                };
-
-                this.pyodide.addEventListener('message', handler);
-                this.pyodide.postMessage({
-                    type: 'runPython',
-                    args: ['asyncio.ensure_future(main())']
-                });
-            });
+            this.pyodide.postMessage({ type: MessageTypes.RUN_PYTHON, args: ['asyncio.ensure_future(main())'] });
+            await createPromise(MessageTypes.PYTHON_READY);
 
         } catch (error) {
-            this.term.write('Error initializing Python environment:\n');
-            this.term.write(error.toString() + '\n');
+            this.term.write(`Error initializing Python environment:\n${error}\n`);
             throw error;
         }
     }
@@ -318,10 +186,7 @@ class PyTerminal {
             this.inputBuffer = '';
             const resolve = this.inputResolve;
             this.inputResolve = null;
-
-            // Hide cursor after input
             this.term.write('\x1b[?25l');
-
             resolve(response);
         }
     }
@@ -339,21 +204,15 @@ class PyTerminal {
     }
 
     async getInput(prompt) {
-        // Show cursor before input
         this.term.write('\x1b[?25h');
         this.term.write(prompt);
-
         try {
-            return await new Promise((resolve) => {
-                this.inputResolve = resolve;
-            });
+            return await new Promise(resolve => { this.inputResolve = resolve; });
         } finally {
-            // Hide cursor after input is complete
             this.term.write('\x1b[?25l');
         }
     }
 }
 
-// Initialize terminal when the script loads
 const pyTerminal = new PyTerminal();
 pyTerminal.initialize('terminal').catch(console.error);
