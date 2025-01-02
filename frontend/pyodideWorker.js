@@ -43,7 +43,7 @@ async function initializePyodide() {
         await pyodide.loadPackage(['micropip']);
 
         await pyodide.runPythonAsync(`
-            import sys, asyncio, builtins, codecs, urllib.request
+            import sys, asyncio, builtins, urllib.request
             from pyodide.ffi import create_proxy
             from js import self
 
@@ -54,11 +54,6 @@ async function initializePyodide() {
 
             builtins.print = custom_print
             builtins.input = custom_input
-
-            class StreamDecoderClass:
-                @staticmethod
-                def new(encoding): return self.TextDecoder.new(encoding)
-            codecs.StreamDecoder = StreamDecoderClass
 
             import micropip
             await micropip.install('pyodide-http')

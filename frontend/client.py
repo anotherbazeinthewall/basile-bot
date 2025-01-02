@@ -41,45 +41,39 @@ class ResourceFetcher:
             return (await (await fetch(resource['url'])).string()), None
         except Exception as e:
             error_msg = f"Error fetching {resource_name}: {str(e)}"
-            # window.console.log(error_msg)
             return None, error_msg
 
 class StreamProcessor:
     def __init__(self):
-        self.decoder = codecs.StreamDecoder.new("utf-8")
-    
+        self.decoder = globals()['self'].TextDecoder.new("utf-8")
+
+    @staticmethod
+    def new(encoding):
+        return globals()['self'].TextDecoder.new(encoding)
+
     async def process_stream(self, response) -> AsyncIterator[str]:
         reader = response.js_response.body.getReader()
-        buffer = ""
-        first_chunk = True
+        buffer, first_chunk = "", True
         
         while True:
-            chunk = await reader.read()
-            if chunk.done:
-                break
-                
+            if (chunk := await reader.read()).done: break
             buffer += self.decoder.decode(chunk.value, {"stream": True})
+            
             while 'data: ' in buffer:
-                start = buffer.find('data: ')
-                end = buffer.find('\n', start)
-                if end == -1:
-                    break
-                    
-                data = buffer[start + 6:end].strip()
-                buffer = buffer[end + 1:]
-                
-                if data == '[DONE]':
+                if (end := buffer.find('\n', start := buffer.find('data: '))) == -1: break
+                if (data := buffer[start + 6:end].strip()) == '[DONE]':
+                    buffer = buffer[end + 1:]
                     continue
                     
                 try:
-                    content = json.loads(data).get('choices', [{}])[0].get('delta', {}).get('content', '')
-                    if content:
-                        if first_chunk:
-                            content = content.lstrip()
-                            first_chunk = False
-                        yield content
+                    if content := json.loads(data).get('choices', [{}])[0].get('delta', {}).get('content', ''):
+                        yield content.lstrip() if first_chunk else content
+                        first_chunk = False
                 except json.JSONDecodeError:
-                    continue
+                    pass
+                buffer = buffer[end + 1:]
+
+codecs.StreamDecoder = StreamProcessor
 
 class ChatManager:
     def __init__(self):
@@ -145,7 +139,6 @@ class Conversation:
 
         self.base_system_prompt = (Config.create_system_prompt(resources) if resources 
                                  else "You are Alex Basile.")
-        # window.console.log(self.base_system_prompt)
         
         self.messages = [
             {"role": "system", "content": self.base_system_prompt},
