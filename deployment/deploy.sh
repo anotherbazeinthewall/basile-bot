@@ -28,7 +28,7 @@ prompt_with_default() {
     read -p "$1 [$2]: " input && echo "${input:-$2}"
 }
 
-UTILITIES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+DEPLOYMENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 
 save_configuration() {
     jq -n \
@@ -65,9 +65,9 @@ save_configuration() {
             repo_uri: $repo_uri,
             function_url: $function_url
         }
-    }' > "$UTILITIES_DIR/config.json"
+    }' > "$DEPLOYMENT_DIR/config.json"
     
-    echo "✓ Configuration saved to utilities/config.json"
+    echo "✓ Configuration saved to deployment/config.json"
 }
 
 wait_for_lambda() {
@@ -95,10 +95,10 @@ wait_for_lambda() {
 # Step 1: Interactive configuration
 ###########################################
 load_configuration() {
-    if [ -f "$UTILITIES_DIR/config.json" ]; then
+    if [ -f "$DEPLOYMENT_DIR/config.json" ]; then
         echo -n "Loading existing configuration... "
         export CONFIG_EXISTS=true
-        eval "$(jq -r '.core * .lambda * .derived | to_entries | .[] | "export \(.key | ascii_upcase)=\(.value | @sh)"' "$UTILITIES_DIR/config.json")"
+        eval "$(jq -r '.core * .lambda * .derived | to_entries | .[] | "export \(.key | ascii_upcase)=\(.value | @sh)"' "$DEPLOYMENT_DIR/config.json")"
         echo "✓"
     else
         echo -e "\nCreating new configuration"
@@ -173,7 +173,7 @@ handle_configuration() {
     fi
     
     save_configuration
-    echo -e "Configuration saved to utilities/config.json\n------------------------------------------------------------"
+    echo -e "Configuration saved to deployment/config.json\n------------------------------------------------------------"
 }
 
 handle_configuration
