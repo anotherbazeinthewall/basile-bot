@@ -2,9 +2,18 @@
 set -e # Exit on error
 unset AWS_REGION
 export AWS_PAGER="cat"
-cd "$(dirname "$0")" # Change to script's directory
-PROJECT_ROOT="$(cd .. && pwd)" # Get project root directory (one level up)
-DEFAULT_APP_NAME=$(basename "$PROJECT_ROOT" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g') # Get default app name from directory
+
+# Determine script and project locations
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+if [[ "$SCRIPT_DIR" == */deployment ]]; then
+    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+else
+    PROJECT_ROOT="$SCRIPT_DIR"
+fi
+DEPLOYMENT_DIR="$SCRIPT_DIR"
+
+# Get default app name from directory
+DEFAULT_APP_NAME=$(basename "$PROJECT_ROOT" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')
 
 # Debug and interaction mode handling
 DEBUG=false 

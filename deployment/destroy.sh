@@ -1,22 +1,25 @@
 #!/bin/bash
 set -e # Exit on error
 
-# Change to script's directory
-cd "$(dirname "$0")"
-# Get project root directory (one level up)
-PROJECT_ROOT="$(cd .. && pwd)"
+# Determine script and project locations
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+if [[ "$SCRIPT_DIR" == */deployment ]]; then
+    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+else
+    PROJECT_ROOT="$SCRIPT_DIR"
+fi
+DEPLOYMENT_DIR="$SCRIPT_DIR"
 
 # Debug and interaction mode handling
 DEBUG=false
 NO_INTERACTION=false
 while getopts "dn" opt; do
-  case $opt in
-    d) DEBUG=true ;;
-    n) NO_INTERACTION=true ;;
-  esac
+    case $opt in
+        d) DEBUG=true ;;
+        n) NO_INTERACTION=true ;;
+    esac
 done
 $DEBUG && set -x
-
 export AWS_PAGER="cat"
 
 ###########################################
@@ -42,19 +45,18 @@ handle_error() {
 
 # Load config if it exists
 load_configuration() {
-    if [ -f config.json ]; then
+    local config_file="$DEPLOYMENT_DIR/config.json"
+    if [ -f "$config_file" ]; then
         echo "Loading configuration..."
         # Load core variables
-        AWS_ACCOUNT_ID=$(jq -r '.core.aws_account_id' config.json)
-        AWS_REGION=$(jq -r '.core.aws_region' config.json)
-        APP_NAME=$(jq -r '.core.app_name' config.json)
-        
+        AWS_ACCOUNT_ID=$(jq -r '.core.aws_account_id' "$config_file")
+        AWS_REGION=$(jq -r '.core.aws_region' "$config_file")
+        APP_NAME=$(jq -r '.core.app_name' "$config_file")
         # Load derived variables
-        FUNCTION_NAME=$(jq -r '.derived.function_name' config.json)
-        ROLE_NAME=$(jq -r '.derived.role_name' config.json)
-        POLICY_NAME=$(jq -r '.derived.policy_name' config.json)
-        REPO_NAME=$(jq -r '.derived.repo_name' config.json)
-        
+        FUNCTION_NAME=$(jq -r '.derived.function_name' "$config_file")
+        ROLE_NAME=$(jq -r '.derived.role_name' "$config_file")
+        POLICY_NAME=$(jq -r '.derived.policy_name' "$config_file")
+        REPO_NAME=$(jq -r '.derived.repo_name' "$config_file")
         # Verify required variables
         if [ -z "$AWS_ACCOUNT_ID" ] || [ "$AWS_ACCOUNT_ID" = "null" ] || \
            [ -z "$FUNCTION_NAME" ] || [ "$FUNCTION_NAME" = "null" ] || \
@@ -68,7 +70,8 @@ load_configuration() {
         echo "✓ Configuration loaded successfully"
         return 0
     else
-        echo "❌ Error: config.json not found. Cannot teardown without configuration."
+        echo "❌ Error: config.json not found at $config_file"
+        echo "Cannot teardown without configuration."
         exit 1
     fi
 }

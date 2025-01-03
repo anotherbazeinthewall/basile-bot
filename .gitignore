@@ -4,7 +4,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
-poetry.lock
+Pipenv.lock
 .env
 .venv/
 distribute.sh

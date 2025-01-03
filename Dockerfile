@@ -12,14 +12,13 @@ RUN apk add --no-cache \
     cargo \
     rust \
     git \
-    && pip install --no-cache-dir poetry
+    && pip install --no-cache-dir pipenv
 
-# Copy only pyproject.toml and poetry.lock first
-COPY pyproject.toml poetry.lock ./
+# Copy Pipfile and Pipfile.lock
+COPY Pipfile Pipfile.lock ./
 
-# Install dependencies directly with poetry
-RUN poetry config virtualenvs.create false \
-    && poetry install --no-interaction --no-ansi --no-root \
+# Install dependencies directly with Pipenv
+RUN pipenv install --deploy --system \
     && pip install --no-cache-dir --force-reinstall boto3 botocore \
     && find /usr/local -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local -type f -name "*.pyc" -delete \
