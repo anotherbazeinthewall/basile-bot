@@ -79,14 +79,12 @@ class PyTerminal {
     async dotLoad(msg, ms = 750) {
         console.log(`[${performance.now().toFixed(2)}ms] Starting dotLoad...`);
         const startTime = performance.now();
-
         this.term.write(msg);
         this.term.write('\u001b7');
         let dots = 0;
         let animationInterval;
         let isResolved = false;
         let resolvePromise;
-        let shouldComplete = false;
 
         console.log(`[${(performance.now() - startTime).toFixed(2)}ms] Creating worker...`);
         const worker = new Worker('pyodideWorker.js');
@@ -109,13 +107,13 @@ class PyTerminal {
         const animate = () => {
             const currentTime = performance.now() - startTime;
             console.log(`[${currentTime.toFixed(2)}ms] Animation frame ${dots}`);
-
             this.term.write('\u001b8');
             this.term.write(' '.repeat(3));
             this.term.write('\u001b8');
             this.term.write('.'.repeat(dots));
 
-            if (isResolved && dots === 3 || shouldComplete) {
+            // Only complete if we're resolved AND we've shown exactly 3 dots
+            if (isResolved && dots === 3) {
                 console.log(`[${currentTime.toFixed(2)}ms] Animation complete`);
                 clearInterval(animationInterval);
                 this.term.write('\u001b8');
@@ -124,11 +122,12 @@ class PyTerminal {
                 return;
             }
 
+            // Increment dots, but reset to 0 if we reach 4
             dots = (dots + 1) % 4;
 
-            // If resolved but not at 3 dots yet, continue until we reach 3
-            if (isResolved && dots !== 3) {
-                shouldComplete = true;
+            // If we're resolved but not at 3 dots, keep going until we reach 3
+            if (isResolved && dots === 0) {
+                dots = 1; // Prevent resetting to 0 when resolved
             }
         };
 
