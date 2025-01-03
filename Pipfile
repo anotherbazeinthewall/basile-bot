@@ -4,6 +4,7 @@ python_version = "3.12"
 [scripts]
 deploy = "./deployment/deploy.sh -n"
 destroy = "./deployment/destroy.sh -n"
+serve = "python3 backend/server.py"
 
 [packages]
 boto3 = "==1.35.86"

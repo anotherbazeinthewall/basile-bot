@@ -73,13 +73,10 @@ class StreamProcessor:
                     pass
                 buffer = buffer[end + 1:]
 
-codecs.StreamDecoder = StreamProcessor
-
 class ChatManager:
     def __init__(self):
         self.conversation = Conversation()
         self.stream_processor = StreamProcessor()
-        self.output_handler = OutputHandler()
     
     async def initialize(self):
         await self.conversation.initialize()
@@ -106,11 +103,17 @@ class ChatManager:
         async for content in self.stream_processor.process_stream(response):
             if accumulate:
                 accumulated += content
-            self.output_handler.print_content(content)
+            self._print_content(content)
         
-        self.output_handler.print_completion()
+        self._print_completion()
         if accumulate:
             self.conversation.add_message("assistant", accumulated)
+    
+    def _print_content(self, content: str):
+        print('\n' if content == '\n' else f'\033[92m{content}\033[0m')
+            
+    def _print_completion(self):
+        print('\n\n')
     
     async def handle_user_input(self, user_input: str) -> bool:
         if user_input.lower() == "exit":
@@ -151,16 +154,8 @@ class Conversation:
     def reset_system_prompt(self):
         self.messages[0]["content"] = self.base_system_prompt
 
-class OutputHandler:
-    @staticmethod
-    def print_content(content: str):
-        print('\n' if content == '\n' else f'\033[92m{content}\033[0m')
-            
-    @staticmethod
-    def print_completion():
-        print('\n\n')
-
 async def main():
+    codecs.StreamDecoder = StreamProcessor
     chat_manager = ChatManager()
     if not await chat_manager.initialize():
         return
