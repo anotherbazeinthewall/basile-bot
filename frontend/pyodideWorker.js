@@ -1,20 +1,6 @@
-self.MessageTypes = {
-    STDOUT: 'stdout', STDERR: 'stderr', INPUT: 'input', INPUT_RESPONSE: 'inputResponse',
-    LOAD: 'load', LOADED: 'loaded', LOAD_PACKAGE: 'loadPackage', PACKAGE_LOADED: 'packageLoaded',
-    RUN_PYTHON: 'runPython', PYTHON_READY: 'pythonReady', ERROR: 'error'
-};
+importScripts('./messageTypes.js');
+importScripts('https://cdn.jsdelivr.net/pyodide/v0.23.0/full/pyodide.js');
 
-class MessageHandler {
-    constructor() { this.handlers = new Map(); }
-    register(messageType, handler) { this.handlers.set(messageType, handler); }
-    async handle(message) {
-        const handler = this.handlers.get(message.type);
-        if (handler) return await handler(message);
-        throw new Error(`No handler for: ${message.type}`);
-    }
-}
-
-self.importScripts('https://cdn.jsdelivr.net/pyodide/v0.23.0/full/pyodide.js');
 let pyodide = null;
 let initializePromise = null;
 let inputResolvers = new Map();

@@ -1,69 +1,11 @@
 ## Frontend
 
-This project provides a template for running Python applications in the browser with minimal JavaScript configuration. The frontend architecture allows developers to focus solely on writing Python code in `client.py`, while the underlying JavaScript infrastructure handles browser integration, terminal display, and Python environment management.
+The frontend leverages xterm.js and Pyodide to create a development and user experience as close as possible to a Python CLI. Developers can focus entirely on writing Python code in `client.py`, while the JavaScript infrastructure seamlessly manages terminal interactions, browser integration, and the Python runtime. The template separates concerns, with reusable JavaScript components handling terminal display, environment setup, and communication, leaving `client.py` as the sole file requiring customization. It supports Python features like `print()`, `input()`, asyncio, and package imports via micropip, offering a native development feel. To start, simply copy the template, replace `client.py` with your own code, and run. With built-in support for error handling, network requests, and async programming, this lightweight, modular architecture makes it easy to create browser-based Python apps without worrying about JavaScript.
 
-### Core Philosophy
+## Backend 
 
-The template separates concerns into two distinct areas:
-- **Infrastructure** (`terminal.js`, `pyodideWorker.js`): Handles all browser/JavaScript requirements
-- **Application** (`client.py`): Where developers write pure Python code
+The backend leverages FastAPI to deliver a lightweight yet powerful RESTful API, supporting real-time AI interactions and external data integrations. It integrates AWS Bedrock for generating streaming AI responses, enabling dynamic conversations based on a structured prompt configuration. Modular services handle GitHub, LinkedIn, and resume processing: GitHub data is fetched and summarized into language usage and repository activity, while LinkedIn profile details are scraped from Google search results and formatted for clarity. A dedicated resume parser extracts and formats content from a hosted PDF, presenting it as readable markdown-style sections. Each component is designed with simplicity and modularity in mind, allowing easy customization and scalability. Together, the backend and frontend provide a cohesive platform for interactive, browser-based applications with minimal setup and maximum functionality.
 
-This separation means you can create new browser-based Python applications by:
-1. Copying the template
-2. Replacing only `client.py` with your Python code
-3. Leaving the JavaScript infrastructure untouched
+## Deployment 
 
-### Core Components
-
-#### Terminal Interface (`terminal.js`)
-- Creates an xterm.js terminal instance with custom styling and input handling
-- Manages the terminal UI, cursor states, and user input buffer
-- Implements a custom loading animation with real-time progress feedback
-- Handles message routing between the terminal UI and Python environment
-- Requires no modification for new applications
-
-#### Python Worker (`pyodideWorker.js`)
-- Runs Pyodide in a WebWorker to prevent blocking the main thread
-- Initializes the Python environment with custom print/input functions
-- Manages package loading and Python code execution
-- Handles bidirectional communication with the main thread
-- Serves as a reusable component across different Python applications
-
-#### Message Types (`messageTypes.js`)
-- Defines the communication protocol between terminal and worker
-- Provides message type constants to ensure consistency
-- Implements message handling and validation
-- Centralizes message routing logic
-- Acts as a single source of truth for system messages
-
-### Python Development Experience
-
-The template provides a native Python development experience in the browser:
-
-- **Standard I/O**: Use regular `print()` and `input()` functions as you would in any Python application
-- **Package Support**: Access to Python packages through micropip
-- **Async Support**: Built-in support for asyncio and async/await syntax
-- **Error Handling**: Python exceptions are properly caught and displayed in the terminal
-- **HTTP Capabilities**: Includes pyodide-http for making network requests
-
-### Template Usage
-
-To create a new Python browser application:
-
-1. Clone/copy the template
-2. Keep all files except `client.py`
-3. Create your new `client.py` with these requirements:
-   - Must include an async `main()` function as the entry point
-   - Can use standard Python syntax and features
-   - Can make network requests using standard Python libraries
-   - Can use `print()` and `input()` for terminal interaction
-
-The template handles all browser integration automatically, allowing developers to focus purely on Python application logic.
-
-### Design Considerations
-
-- Completely separates Python application code from browser integration code
-- Provides familiar Python development experience
-- Handles all browser-specific complexities behind the scenes
-- Maintains consistent terminal experience across different applications
-- Ensures proper resource management and error handling
+Deploying and managing this app is straightforward with `deploy.sh` and `destroy.sh`. The setup script handles everything from building and pushing a Docker image to AWS Elastic Container Registry (ECR) to configuring a serverless AWS Lambda function, complete with IAM roles and a CloudWatch warm-up rule. Local testing is a breeze with `docker-compose.yml`, and deployment outputs a ready-to-use Lambda Function URL. For cleanup, `destroy.sh` efficiently removes all associated resources, leaving no clutter behind. This simple, reliable workflow makes it easy to go from local development to cloud deployment without any fuss.
