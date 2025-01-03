@@ -1,5 +1,6 @@
 import datetime
 import logging
+import json
 from pathlib import Path
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
@@ -93,6 +94,13 @@ def get_linkedin_digest():
         headers={
             "Content-Type": "text/plain; charset=utf-8"
         }
+    )
+
+@app.get("/api/prompt_config")
+async def prompt_config_route():
+    return Response(
+        content=json.dumps(get_prompt_config()),
+        media_type="application/json"
     )
 
 @app.post("/api/chat")
