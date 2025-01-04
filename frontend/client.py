@@ -1,10 +1,10 @@
 import json
 import codecs
 from urllib.request import fetch
-from typing import Dict, Tuple, AsyncIterator
+from typing import Tuple, AsyncIterator
         
-class ResourceFetcher:
-    RESOURCES = {
+class Context:
+    SOURCES = {
         'Resume': {
             'url': '/api/resume',
             'display_url': 'https://resume.alexbasile.com'
@@ -15,23 +15,37 @@ class ResourceFetcher:
         },
         'GitHub': {
             'url': '/api/github',
-            'display_url': 'https://github.com/anotherbazeinthewall'
+            'display_url': 'https://github.com/anotherbazeinthewall/basilebot'
         }
     }
 
     @classmethod
-    async def initialize(cls) -> Dict[str, str]:
-        """Single entry point for fetching all resources"""
-        resources = {}
-        for name, resource in cls.RESOURCES.items():
+    async def initialize(cls) -> Tuple[str, str]:
+        """Returns system prompt and initial message with all context incorporated"""
+        # Fetch prompt config first
+        try:
+            prompt_response = await fetch("/api/prompt_config")
+            prompt_config = await prompt_response.json()
+            system_prompt_template = prompt_config["system_prompt"]
+            initial_message = prompt_config["initial_message"]
+        except Exception as e:
+            print(f"Error fetching prompt configuration: {str(e)}")
+            system_prompt_template = "You are Alex Basile."
+            initial_message = "Tell me a joke about technical difficulties."
+
+        # Then fetch context sequentially
+        context_values = []
+        for name, source in cls.SOURCES.items():
             try:
-                print(f'\u001b[90mFetching {name}: \u001b[1m\u001b[4m{resource["display_url"]}\u001b[0m\n')
-                content = await (await fetch(resource['url'])).string()
-                resources[name] = content
+                print(f'\u001b[90mFetching {name}: \u001b[1m\u001b[4m{source["display_url"]}\u001b[0m\n')
+                content = await (await fetch(source['url'])).string()
+                context_values.append(content)
             except Exception as e:
-                print(f"Error fetching {name}: {str(e)}")
+                print(f"Error fetching {name} context: {str(e)}")
                 continue
-        return resources
+                
+        system_prompt = system_prompt_template.format(resources="\n".join(context_values))
+        return system_prompt, initial_message
 
 class StreamProcessor:
     def __init__(self):
@@ -126,23 +140,13 @@ class Conversation:
         self.messages = []
         
     async def initialize(self):
-        system_prompt, initial_message = await self._get_prompt_config()
-        resources = await ResourceFetcher.initialize()
+        system_prompt, initial_message = await Context.initialize()
         
-        self.base_system_prompt = system_prompt.format(resources="\n".join(resources.values()))
+        self.base_system_prompt = system_prompt
         self.messages = [
             {"role": "system", "content": self.base_system_prompt},
             {"role": "user", "content": initial_message}
         ]
-
-    async def _get_prompt_config(self) -> Tuple[str, str]:
-        try:
-            response = await fetch("/api/prompt_config")
-            config = await response.json()
-            return config["system_prompt"], config["initial_message"]
-        except Exception as e:
-            print(f"Error fetching prompt configuration: {str(e)}")
-            return "You are Alex Basile.", "Tell me a joke about technical difficulties."
 
     def add_message(self, role: str, content: str):
         self.messages.append({"role": role, "content": content})

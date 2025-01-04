@@ -24,5 +24,6 @@ YOU WON'T:
 - Answer questions for which you do not have information available here.
 - Use pretentious language like "passionate", "innovative", "complex" or "cutting edge"
 - Use emojis""",
-        "initial_message": "Introduce yourself to me in fewer than 150 words. Offer to chat about any aspect of your professional experience that I'd like to know more about."
+        "initial_message": "Introduce yourself to me in fewer than 150 words. Offer to chat about any aspect of your professional experience that I'd like to know more about.",
+        "raw": True  # Add this flag to indicate we want the raw template
     }

@@ -1,11 +1,75 @@
-## Frontend
+# BasileBot
 
-The frontend leverages xterm.js and Pyodide to create a development and user experience as close as possible to a Python CLI. Developers can focus entirely on writing Python code in `client.py`, while the JavaScript infrastructure seamlessly manages terminal interactions, browser integration, and the Python runtime. The template separates concerns, with reusable JavaScript components handling terminal display, environment setup, and communication, leaving `client.py` as the sole file requiring customization. It supports Python features like `print()`, `input()`, asyncio, and package imports via micropip, offering a native development feel. To start, simply copy the template, replace `client.py` with your own code, and run. With built-in support for error handling, network requests, and async programming, this lightweight, modular architecture makes it easy to create browser-based Python apps without worrying about JavaScript.
+BasileBot is a self-contained experiment in simulating a chat CLI in the browser while achieving scale-to-zero pricing in the cloud. The bot leverages Claude 3.5 Haiku via AWS Bedrock to reference my resume, LinkedIn profile, and GitHub account while answering questions about my professional experience. The application serves as a template for future web development projects that prioritize terminal-like interactions with spotty-utilization patterns and low tolerance for cold-start delays.
 
-## Backend 
+### Frontend
 
-The backend leverages FastAPI to deliver a lightweight yet powerful RESTful API, supporting real-time AI interactions and external data integrations. It integrates AWS Bedrock for generating streaming AI responses, enabling dynamic conversations based on a structured prompt configuration. Modular services handle GitHub, LinkedIn, and resume processing: GitHub data is fetched and summarized into language usage and repository activity, while LinkedIn profile details are scraped from Google search results and formatted for clarity. A dedicated resume parser extracts and formats content from a hosted PDF, presenting it as readable markdown-style sections. Each component is designed with simplicity and modularity in mind, allowing easy customization and scalability. Together, the backend and frontend provide a cohesive platform for interactive, browser-based applications with minimal setup and maximum functionality.
+The frontend leverages an Xterm.js terminal with WebGL rendering and Pyodide to create a high-performance Python CLI experience in the browser. The architecture employs:
 
-## Deployment 
+- A Web Worker-based Pyodide runtime for non-blocking Python execution
+- Message-based architecture for reliable terminal I/O and state management
+- Custom stream processor for real-time response handling
+- WebGL-accelerated terminal rendering for smooth output
 
-Deploying and managing this app is straightforward with `deploy.sh` and `destroy.sh`. The setup script handles everything from building and pushing a Docker image to AWS Elastic Container Registry (ECR) to configuring a serverless AWS Lambda function, complete with IAM roles and a CloudWatch warm-up rule. Local testing is a breeze with `docker-compose.yml`, and deployment outputs a ready-to-use Lambda Function URL. For cleanup, `destroy.sh` efficiently removes all associated resources, leaving no clutter behind. This simple, reliable workflow makes it easy to go from local development to cloud deployment without any fuss.
+All application logic is concentrated in `frontend/client.py`, with the JavaScript infrastructure providing terminal operations, Python runtime management, and error handling behind the scenes. The template obfuscates Pyodide's unique operations (like print or input) to simplify network requests and async operations, creating both a development and user experience that closely mirrors programming with a local Python environment. Theoretically, all that's needed to use this frontend template for a new application is a new `client.py`.
+
+### Backend
+
+The application employs a FastAPI backend with streaming response capabilities to provide a tight API for core application logic. The architecture features:
+
+- Modular service layer for processing data from GitHub, LinkedIn, and hosted resume
+- Bedrock client configuration with graceful credential fallback
+- Optimized file serving with conditional caching strategies
+- Configurable CORS and streaming response headers for production deployment
+
+The design prioritizes simplicity and reusability while maintaining efficient scaling capabilities and robust error handling.
+
+### Deployment
+
+The application uses a containerized deployment strategy with AWS Lambda, enabling true scale-to-zero with minimal cold starts. A five-minute warmup rule keeps the container responsive while staying within Lambda's free tier. The Docker setup supports local testing with mounted credentials, while the Lambda Web Adapter enables response streaming. The deployment automation (`deploy.sh`, `destroy.sh`) provides:
+
+- Interactive configuration with state persistence
+- Comprehensive AWS resource management (IAM, Lambda, ECR, EventBridge)
+- Health checks and deployment verification
+- Graceful error handling and rollback capabilities
+- Local testing validation before deployment
+
+## Getting Started
+
+### Prerequisites
+
+- Docker
+- pipenv (for dependency management)
+- AWS credentials with Bedrock access (us-west-2)
+
+### Deployment Prerequisites
+
+Required AWS permissions:
+
+- IAM: Role/policy management and attachment
+- Lambda: Function management, URL configuration, logging
+- ECR: Repository management, image pushing
+- EventBridge: Rule management, Lambda trigger configuration
+
+AWS managed policies that grant required permissions:
+
+- AWSLambda_FullAccess
+- AmazonECR_FullAccess
+- IAMFullAccess
+- CloudWatchEventsFullAccess
+
+## Local Development
+
+Clone and modify as needed. Core application logic lives in:
+
+- `frontend/client.py`: Frontend terminal interface
+- `backend/server.py`: FastAPI backend
+- `backend/modules/`: Backend service modules
+
+Project uses pipenv for dependency management. Docker configuration optimized for minimal image size using Alpine base.
+
+## License
+
+MIT License
+
+Feel free to review and adapt to your specific use case. Unless your name is Alex Basile, you might not find the BasileBot useful as is ;) 
