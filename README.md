@@ -1,6 +1,6 @@
-# BasileBot
+# basile-bot
 
-BasileBot is a self-contained experiment in simulating a chat CLI in the browser while achieving scale-to-zero pricing in the cloud. The bot leverages Claude 3.5 Haiku via AWS Bedrock to reference my resume, LinkedIn profile, and GitHub account while answering questions about my professional experience. The application serves as a template for future web development projects that prioritize terminal-like interactions with spotty-utilization patterns and low tolerance for cold-start delays.
+basile-bot is a self-contained experiment in simulating a chat CLI in the browser while achieving scale-to-zero pricing in the cloud. The bot leverages Claude 3.5 Haiku via AWS Bedrock to reference my resume, LinkedIn profile, and GitHub account while answering questions about my professional experience. The application serves as a template for future web development projects that prioritize terminal-like interactions with spotty-utilization patterns and low tolerance for cold-start delays.
 
 ### Frontend
 
@@ -72,4 +72,4 @@ Project uses pipenv for dependency management. Docker configuration optimized fo
 
 MIT License
 
-Feel free to review and adapt to your specific use case. Unless your name is Alex Basile, you might not find the BasileBot useful as is ;) 
+Feel free to review and adapt to your specific use case. Unless your name is Alex Basile, you might not find the basile-bot useful as is ;) 

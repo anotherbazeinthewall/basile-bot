@@ -15,7 +15,7 @@ class Context:
         },
         'GitHub': {
             'url': '/api/github',
-            'display_url': 'https://github.com/anotherbazeinthewall/basilebot'
+            'display_url': 'https://github.com/anotherbazeinthewall/basile-bot'
         }
     }
 
