@@ -200,7 +200,7 @@ aws sts get-caller-identity &>/dev/null && echo "✓" || { echo "❌"; echo "Ple
 
 echo -e "\n📋 Building and testing locally..."
 cd "$PROJECT_ROOT"
-docker-compose up --build -d
+docker compose up --build -d --force-recreate
 
 echo "Testing local endpoint..."
 for i in {1..6}; do
@@ -208,11 +208,11 @@ for i in {1..6}; do
         echo "Health check successful!"
         break
     fi
-    [ $i -eq 6 ] && { echo "Health check failed."; docker-compose down; exit 1; }
+    [ $i -eq 6 ] && { echo "Health check failed."; docker compose down; exit 1; }
     sleep 5
 done
 
-docker-compose down
+docker compose down
 echo "Local testing complete."
 
 ###########################################

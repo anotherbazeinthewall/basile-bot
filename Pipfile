@@ -1,3 +1,8 @@
+[[source]]
+url = "https://pypi.python.org/simple"
+verify_ssl = true
+name = "pypi"
+
 [requires]
 python_version = "3.12"
 
@@ -5,6 +10,7 @@ python_version = "3.12"
 deploy = "./deployment/deploy.sh -n"
 destroy = "./deployment/destroy.sh -n"
 serve = "python3 backend/server.py"
+serve-container = "docker compose up --build --force-recreate"
 
 [packages]
 boto3 = "==1.35.86"
@@ -15,4 +21,3 @@ uvicorn = "==0.34.0"
 fastapi = "==0.115.6"
 pypdf = "==5.1.0"
 watchfiles = "==1.0.3"
-
