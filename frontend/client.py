@@ -15,7 +15,7 @@ class Context:
         },
         'GitHub': {
             'url': '/api/github',
-            'display_url': 'https://github.com/anotherbazeinthewall/basile-bot'
+            'display_url': 'https://github.com/anotherbazeinthewall'
         }
     }
 
@@ -37,7 +37,7 @@ class Context:
         context_values = []
         for name, source in cls.SOURCES.items():
             try:
-                print(f'\u001b[90mFetching {name}: \u001b[1m\u001b[4m{source["display_url"]}\u001b[0m\n')
+                print(f'\u001b[90mRetrieving {name}: \u001b[1m\u001b[4m{source["display_url"]}\u001b[0m\n')
                 content = await (await fetch(source['url'])).string()
                 context_values.append(content)
             except Exception as e:
