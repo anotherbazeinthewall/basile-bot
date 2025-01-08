@@ -94,6 +94,17 @@ class GitHubAPI:
         """Fetch repositories starred by the user."""
         url = f"{BASE_URL}/users/{USERNAME}/starred"
         return self._fetch_url(url) or []
+    
+    # def get_readme(self, repo_name: str = "basile-bot") -> Optional[str]:
+    #     """Fetch README content for a specific repository."""
+    #     url = f"{BASE_URL}/repos/{USERNAME}/{repo_name}/readme"
+    #     try:
+    #         response = self.session.get(url, headers={'Accept': 'application/vnd.github.raw'})
+    #         response.raise_for_status()
+    #         return response.text
+    #     except requests.exceptions.RequestException as e:
+    #         logger.error(f"Error fetching README for {repo_name}: {e}")
+    #         return None
 
 class GitHubDigest:
     """Processes and formats GitHub data into a readable digest."""
@@ -129,9 +140,9 @@ class GitHubDigest:
     def format_digest(
         top_repos: List[Dict],
         language_stats: Counter,
-        starred_repos: List[Dict]
+        starred_repos: List[Dict],
+        # readme_content: Optional[str] = None
     ) -> str:
-        """Format the GitHub data into a readable string."""
         sections = []
         
         # Languages section
@@ -142,19 +153,42 @@ class GitHubDigest:
         # Top repositories section
         sections.append("\nYOUR PERSONAL GITHUB REPOS:\n")
         for repo in top_repos:
-            description = repo.get('description', 'No description available')
-            sections.append(
-                f"""- {repo['full_name']}: "{description}" ({repo['html_url']})"""
-            )
-        
+            try:
+                name = repo.get('full_name') or repo.get('name')
+                description = repo.get('description')
+                url = repo.get('html_url')
+                
+                # Skip if missing required fields or if URL is an API URL
+                if not all([name, description, url]) or 'api.github.com' in url:
+                    continue
+                    
+                sections.append(f"""- {name}: "{description}" ({url})""")
+            except Exception as e:
+                logger.warning(f"Skipping malformed repo data: {e}")
+                continue
+
         # Starred repositories section
         sections.append("\nYOUR WATCHED GITHUB REPOS:\n")
         for repo in starred_repos[:TOP_REPOS_LIMIT]:
-            description = repo.get('description', '[No description available]')
-            sections.append(
-                f"""- {repo['full_name']}: "{description}" ({repo['html_url']})"""
-            )
-        
+            try:
+                name = repo.get('full_name') or repo.get('name')
+                description = repo.get('description')
+                url = repo.get('html_url')
+                
+                # Skip if missing required fields or if URL is an API URL
+                if not all([name, description, url]) or 'api.github.com' in url:
+                    continue
+                    
+                sections.append(f"""- {name}: "{description}" ({url})""")
+            except Exception as e:
+                logger.warning(f"Skipping malformed starred repo data: {e}")
+                continue
+
+        # # Add README section at the end if available
+        # if readme_content:
+        #     sections.append("\nYOU (THE BASILE-BOT) ARE:\n")
+        #     sections.append(readme_content)
+
         return "\n".join(sections) + "\n\n"
 
 def pull_github(bypass_cache: bool = False) -> str:
@@ -176,21 +210,23 @@ def pull_github(bypass_cache: bool = False) -> str:
         own_repos = api.get_repos()
         contributed_repos = api.get_contributed_repos()
         starred_repos = api.get_starred_repos()
-        
+        # readme_content = api.get_readme()  # Fetch README
+
         # If any of the data fetches failed, return an empty string
         if not own_repos or not contributed_repos or not starred_repos:
             return ""
-        
+
         # Process data
         all_repos = digest.merge_repos(own_repos, contributed_repos)
         top_active_repos = digest.get_top_active_repos(all_repos)
         language_stats = digest.get_languages(own_repos)
-        
+
         # Format output
         return digest.format_digest(
             top_active_repos,
             language_stats,
-            starred_repos
+            starred_repos,
+            # readme_content
         )
     except Exception as e:
         logger.error(f"Error generating GitHub digest: {e}")
