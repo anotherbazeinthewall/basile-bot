@@ -9,7 +9,7 @@ Dockerfile
 docker-compose.yml
 
 # Utilities
-utilities/
+deployment/
 
 # Python
 **/__pycache__
