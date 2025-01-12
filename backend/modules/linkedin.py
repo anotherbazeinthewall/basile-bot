@@ -82,10 +82,10 @@ def pull_linkedin() -> str:
         # Format the output
         return (
             f"YOUR LINKEDIN PROFILE:\n\n"
-            f"Followers: {followers}\n"
-            f"Link: {link}\n"
             f"Title: {title}\n"
             f"About: {snippet}\n"
+            f"Link: {link}\n"
+            f"Followers: {followers}\n"
             "\n"
         )
     except Exception as e:

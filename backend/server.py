@@ -6,13 +6,9 @@ from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, FileResponse, StreamingResponse
-from modules import *
+from modules import pull_resume, pull_linkedin, pull_github, get_prompt_config, generate_stream
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+logger = logging.getLogger("uvicorn")
 
 class Message(BaseModel):
     role: str
