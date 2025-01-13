@@ -1,11 +1,12 @@
 import re
+import time
 import requests
 import logging
 from bs4 import BeautifulSoup
-from typing import Optional
+from typing import Optional, Dict, Any
 
 # Initialize logger
-logger = logging.getLogger("uvicorn")  # Use uvicorn's logger instead of creating a new one
+logger = logging.getLogger("uvicorn")
 
 # Constants
 BASE_URL = "https://www.google.com/search?q="
@@ -15,32 +16,64 @@ USER_AGENT = (
     "Chrome/91.0.4472.124 Safari/537.36"
 )
 SEARCH_QUERY = "site:linkedin.com/in awbasile"
+CACHE_DURATION = 3600  # 1 hour in seconds
 
-def _fetch_google_results() -> Optional[str]:
-    """
-    Fetch Google search results for the LinkedIn profile.
+class LinkedInAPI:
+    """Handles LinkedIn data fetching and caching."""
     
-    Returns:
-        Optional[str]: Raw HTML response or None if request fails
-    """
-    headers = {"User-Agent": USER_AGENT}
-    search_url = f"{BASE_URL}{SEARCH_QUERY.replace(' ', '+')}"
+    def __init__(self, bypass_cache: bool = False) -> None:
+        self.session = requests.Session()
+        self.session.headers.update({"User-Agent": USER_AGENT})
+        self._cache = {}
+        self._cache_timestamps = {}
+        self.bypass_cache = bypass_cache
     
-    try:
-        response = requests.get(search_url, headers=headers)
-        response.raise_for_status()
-        return response.text
-    except requests.RequestException as e:
-        logger.error(f"Error fetching Google search results: {e}")
-        return None
+    def _is_cache_valid(self, cache_key: str) -> bool:
+        """Check if cached data is still valid."""
+        if self.bypass_cache:
+            return False
+            
+        if cache_key not in self._cache_timestamps:
+            return False
+            
+        elapsed_time = time.time() - self._cache_timestamps[cache_key]
+        return elapsed_time < CACHE_DURATION
+    
+    def _fetch_url(self, url: str, cache_key: str = None) -> Optional[str]:
+        """Fetch data from URL with caching."""
+        if cache_key:
+            if self._is_cache_valid(cache_key):
+                logger.info(f"Using cached data for {cache_key}")
+                return self._cache[cache_key]
+            logger.info(f"Fetching fresh data for {cache_key}")
+        
+        try:
+            response = self.session.get(url)
+            response.raise_for_status()
+            data = response.text
+            
+            if cache_key:
+                self._cache[cache_key] = data
+                self._cache_timestamps[cache_key] = time.time()
+            
+            return data
+        except requests.RequestException as e:
+            logger.error(f"Error fetching URL {url}: {e}")
+            return None
+    
+    def fetch_google_results(self) -> Optional[str]:
+        """Fetch Google search results for the LinkedIn profile."""
+        search_url = f"{BASE_URL}{SEARCH_QUERY.replace(' ', '+')}"
+        return self._fetch_url(search_url, cache_key="linkedin_google_results")
+
+# Create a module-level instance
+linkedin_api = LinkedInAPI()
 
 def _extract_profile_data(html: str) -> tuple[str, str, str, str]:
     """
     Extract LinkedIn profile data from Google search results.
-    
     Args:
         html (str): Raw HTML from Google search
-        
     Returns:
         tuple: (title, link, snippet, followers)
     """
@@ -63,16 +96,24 @@ def _extract_profile_data(html: str) -> tuple[str, str, str, str]:
     
     return title, link, snippet, followers
 
-def pull_linkedin() -> str:
+def pull_linkedin(bypass_cache: bool = False) -> str:
     """
     Fetch and generate a digest of LinkedIn information for a predefined user.
+    
+    Args:
+        bypass_cache (bool): If True, bypass the cache and fetch fresh data
     
     Returns:
         str: A summary of the user's LinkedIn profile. Returns an empty string if any error occurs.
     """
     try:
+        # Use the module-level instance
+        global linkedin_api
+        if bypass_cache:
+            linkedin_api = LinkedInAPI(bypass_cache=True)
+        
         # Fetch search results
-        html = _fetch_google_results()
+        html = linkedin_api.fetch_google_results()
         if not html:
             return ""
             
@@ -93,6 +134,14 @@ def pull_linkedin() -> str:
         return ""
 
 if __name__ == "__main__":
-    # Configure logging for standalone execution
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    print(pull_linkedin())
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Fetch LinkedIn profile information')
+    parser.add_argument('--fresh', action='store_true', 
+                       help='Bypass cache and fetch fresh data')
+    args = parser.parse_args()
+    
+    if args.fresh:
+        logger.info("Bypassing cache and fetching fresh data")
+    
+    print(pull_linkedin(bypass_cache=args.fresh))
