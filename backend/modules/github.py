@@ -48,12 +48,13 @@ class GitHubAPI:
         Returns:
             Optional[Any]: JSON response data or None if request fails
         """
-        if cache_key and self._is_cache_valid(cache_key):
-            logger.info(f"Using cached data for {cache_key}")
-            return self._cache[cache_key]
+        if cache_key:
+            if self._is_cache_valid(cache_key):
+                logger.info(f"Using cached data for {cache_key}")
+                return self._cache[cache_key]
+            logger.info(f"Fetching fresh data for {cache_key}")
 
         try:
-            logger.info(f"Fetching fresh data for {cache_key}")
             response = self.session.get(url)
             response.raise_for_status()
             data = response.json()
@@ -70,12 +71,14 @@ class GitHubAPI:
     def get_repos(self) -> List[Dict]:
         """Fetch user's owned repositories."""
         url = f"{BASE_URL}/users/{USERNAME}/repos?type=owner&per_page=100"
-        return self._fetch_url(url) or []
-    
+        cache_key = f"repos_{USERNAME}"
+        return self._fetch_url(url, cache_key=cache_key) or []
+
     def get_contributed_repos(self) -> List[Dict]:
         """Fetch repositories the user has contributed to."""
         url = f"{BASE_URL}/users/{USERNAME}/events/public"
-        events = self._fetch_url(url)
+        cache_key = f"contributed_{USERNAME}"
+        events = self._fetch_url(url, cache_key=cache_key)
         if not events:
             return []
         
@@ -89,11 +92,12 @@ class GitHubAPI:
                         "url": repo["url"],
                     }
         return list(contributed_repos.values())
-    
+
     def get_starred_repos(self) -> List[Dict]:
         """Fetch repositories starred by the user."""
         url = f"{BASE_URL}/users/{USERNAME}/starred"
-        return self._fetch_url(url) or []
+        cache_key = f"starred_{USERNAME}"
+        return self._fetch_url(url, cache_key=cache_key) or []
     
     # def get_readme(self, repo_name: str = "basile-bot") -> Optional[str]:
     #     """Fetch README content for a specific repository."""
@@ -191,6 +195,8 @@ class GitHubDigest:
 
         return "\n".join(sections) + "\n\n"
 
+github_api = GitHubAPI()
+
 def pull_github(bypass_cache: bool = False) -> str:
     """
     Fetch and generate a digest of GitHub information for a predefined user.
@@ -203,13 +209,18 @@ def pull_github(bypass_cache: bool = False) -> str:
              languages, and starred repos.
     """
     try:
-        api = GitHubAPI(bypass_cache=bypass_cache)
+        # Use the module-level instance instead of creating a new one
+        global github_api
+        if bypass_cache:
+            github_api = GitHubAPI(bypass_cache=True)
+        
         digest = GitHubDigest()
         
         # Fetch data
-        own_repos = api.get_repos()
-        contributed_repos = api.get_contributed_repos()
-        starred_repos = api.get_starred_repos()
+        own_repos = github_api.get_repos()
+        contributed_repos = github_api.get_contributed_repos()
+        starred_repos = github_api.get_starred_repos()
+
         # readme_content = api.get_readme()  # Fetch README
 
         # If any of the data fetches failed, return an empty string
